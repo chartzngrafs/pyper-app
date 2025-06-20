@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Pyper
+Comment=A Modern Navidrome Music Player
+GenericName=Music Player
+Icon=/home/kevin/coding-playground/pyper-app/assets/pyper-icon.png
+Exec=/home/kevin/coding-playground/pyper-app/run-pyper.sh
+Path=/home/kevin/coding-playground/pyper-app
+Terminal=false
+StartupNotify=true
+Categories=AudioVideo;Audio;Player;Qt;
+Keywords=music;audio;player;navidrome;streaming;
+MimeType=audio/mpeg;audio/mp3;audio/flac;audio/ogg;
+StartupWMClass=pyper 

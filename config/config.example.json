@@ -2,7 +2,11 @@
     "navidrome": {
         "server_url": "http://localhost:4533",
         "username": "your_username",
-        "password": "your_password"
+        "password": "your_password",
+        "database_path": "/var/lib/navidrome/navidrome.db",
+        "ssh_host": "your.server.com",
+        "ssh_user": "your_ssh_user",
+        "ssh_key_path": "~/.ssh/id_rsa"
     },
     "ui": {
         "theme": "dark_teal.xml",

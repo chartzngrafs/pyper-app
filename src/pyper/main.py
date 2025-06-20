@@ -25,6 +25,26 @@ import json
 import xml.etree.ElementTree as ET
 import random
 import string
+import sqlite3
+from urllib.parse import urlparse
+import subprocess
+import tempfile
+import shutil
+import logging
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('pyper.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger('Pyper')
+
+# Log startup
+logger.info("Pyper Music Player starting up...")
 
 # --- Configuration ---
 def load_config():
@@ -48,6 +68,243 @@ CONFIG = load_config()
 NAVIDROME_URL = CONFIG['navidrome']['server_url']
 NAVIDROME_USER = CONFIG['navidrome']['username']
 NAVIDROME_PASS = CONFIG['navidrome']['password']
+
+class NavidromeDBHelper:
+    """Helper class to access Navidrome's SQLite database for play counts and stats"""
+    
+    def __init__(self, db_path=None, ssh_config=None):
+        self.db_path = db_path
+        self.ssh_config = ssh_config
+        self.temp_db_path = None
+        
+        if not db_path:
+            # Try common Navidrome database locations
+            self.db_path = self.find_navidrome_db()
+    
+    def find_navidrome_db(self):
+        """Try to find the Navidrome database file"""
+        common_paths = [
+            "/var/lib/navidrome/navidrome.db",
+            "/opt/navidrome/navidrome.db", 
+            "/home/navidrome/navidrome.db",
+            "~/navidrome/navidrome.db",
+            "./navidrome.db"
+        ]
+        
+        for path in common_paths:
+            expanded_path = os.path.expanduser(path)
+            if os.path.exists(expanded_path):
+                return expanded_path
+        return None
+    
+    def get_connection(self):
+        """Get database connection if available"""
+        db_to_use = self.db_path
+        
+        # If SSH config is provided, copy database from remote server
+        if self.ssh_config and self.ssh_config.get('ssh_host'):
+            db_to_use = self.get_remote_database()
+            if not db_to_use:
+                return None
+        
+        if not db_to_use or not os.path.exists(db_to_use):
+            return None
+        try:
+            return sqlite3.connect(db_to_use, timeout=5.0)
+        except Exception as e:
+            print(f"Database connection error: {e}")
+            return None
+    
+    def get_remote_database(self):
+        """Copy database from remote server via SSH"""
+        if not self.ssh_config:
+            return None
+            
+        try:
+            # Create temporary file for the database copy
+            if not self.temp_db_path:
+                temp_dir = tempfile.mkdtemp()
+                self.temp_db_path = os.path.join(temp_dir, 'navidrome_remote.db')
+            
+            ssh_host = self.ssh_config.get('ssh_host')
+            ssh_user = self.ssh_config.get('ssh_user', 'root')
+            ssh_key = self.ssh_config.get('ssh_key_path')
+            remote_path = self.db_path
+            
+            # Build SCP command
+            scp_cmd = ['scp']
+            if ssh_key:
+                expanded_key = os.path.expanduser(ssh_key)
+                if os.path.exists(expanded_key):
+                    scp_cmd.extend(['-i', expanded_key])
+            
+            # Add SSH options for non-interactive use
+            scp_cmd.extend([
+                '-o', 'StrictHostKeyChecking=no',
+                '-o', 'ConnectTimeout=10',
+                '-o', 'BatchMode=yes'
+            ])
+            
+            remote_source = f"{ssh_user}@{ssh_host}:{remote_path}"
+            scp_cmd.extend([remote_source, self.temp_db_path])
+            
+            print(f"Copying database from {remote_source}...")
+            
+            # Execute SCP command
+            result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print(f"Database copied successfully to {self.temp_db_path}")
+                return self.temp_db_path
+            else:
+                print(f"SCP failed: {result.stderr}")
+                return None
+                
+        except subprocess.TimeoutExpired:
+            print("Database copy timed out")
+            return None
+        except Exception as e:
+            logger.error(f"Error copying remote database: {e}")
+            return None
+    
+    def cleanup(self):
+        """Clean up temporary files"""
+        if self.temp_db_path and os.path.exists(self.temp_db_path):
+            try:
+                temp_dir = os.path.dirname(self.temp_db_path)
+                shutil.rmtree(temp_dir)
+                print("Cleaned up temporary database files")
+            except Exception as e:
+                logger.error(f"Error cleaning up temp files: {e}")
+    
+    def get_album_play_counts(self):
+        """Get play counts for albums"""
+        conn = self.get_connection()
+        if not conn:
+            return {}
+        
+        try:
+            cursor = conn.cursor()
+            # Get play counts by album from annotation table
+            cursor.execute("""
+                SELECT 
+                    a.id,
+                    a.name,
+                    a.album_artist,
+                    COALESCE(an.play_count, 0) as play_count,
+                    an.play_date as last_played
+                FROM album a
+                LEFT JOIN annotation an ON a.id = an.item_id AND an.item_type = 'album'
+                WHERE an.play_count > 0 OR an.play_count IS NULL
+                ORDER BY play_count DESC
+            """)
+            
+            results = {}
+            for row in cursor.fetchall():
+                album_id, name, artist, play_count, last_played = row
+                if play_count is None:
+                    play_count = 0
+                results[album_id] = {
+                    'name': name,
+                    'artist': artist,
+                    'play_count': play_count,
+                    'last_played': last_played
+                }
+            
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Database query error: {e}")
+            conn.close()
+            return {}
+    
+    def get_most_played_albums(self, limit=50):
+        """Get most played albums"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    a.id,
+                    a.name,
+                    a.album_artist,
+                    a.id as cover_art_id,
+                    a.max_year,
+                    an.play_count
+                FROM album a
+                JOIN annotation an ON a.id = an.item_id AND an.item_type = 'album'
+                WHERE an.play_count > 0
+                ORDER BY an.play_count DESC, an.play_date DESC
+                LIMIT ?
+            """, (limit,))
+            
+            results = []
+            for row in cursor.fetchall():
+                album_id, name, artist, cover_art_id, year, play_count = row
+                results.append({
+                    'id': album_id,
+                    'name': name,
+                    'artist': artist,
+                    'coverArt': cover_art_id,
+                    'year': year,
+                    'playCount': play_count,
+                    'songCount': 0  # Will be filled when needed
+                })
+            
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Database query error: {e}")
+            conn.close()
+            return []
+    
+    def get_recently_played_albums(self, limit=50):
+        """Get recently played albums"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 
+                    a.id,
+                    a.name,
+                    a.album_artist,
+                    a.id as cover_art_id,
+                    a.max_year,
+                    an.play_date as last_played,
+                    an.play_count
+                FROM album a
+                JOIN annotation an ON a.id = an.item_id AND an.item_type = 'album'
+                WHERE an.play_date IS NOT NULL
+                ORDER BY an.play_date DESC
+                LIMIT ?
+            """, (limit,))
+            
+            results = []
+            for row in cursor.fetchall():
+                album_id, name, artist, cover_art_id, year, last_played, play_count = row
+                results.append({
+                    'id': album_id,
+                    'name': name,
+                    'artist': artist,
+                    'coverArt': cover_art_id,
+                    'year': year,
+                    'lastPlayed': last_played,
+                    'playCount': play_count,
+                    'songCount': 0  # Will be filled when needed
+                })
+            
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Database query error: {e}")
+            conn.close()
+            return []
 
 class CustomSubsonicClient:
     """Custom Subsonic API client that handles authentication correctly"""
@@ -147,6 +404,70 @@ class CustomSubsonicClient:
             'songCount': song_count
         }
         return self._make_request('search3', params)
+    
+    def getTopSongs(self, artist=None, count=50):
+        """Get top songs (if supported by server)"""
+        params = {'count': count}
+        if artist:
+            params['artist'] = artist
+        try:
+            return self._make_request('getTopSongs', params)
+        except:
+            return None
+    
+    def getAlbumList2_byFrequent(self, size=50):
+        """Get albums ordered by play frequency"""
+        params = {
+            'type': 'frequent',
+            'size': size
+        }
+        try:
+            return self._make_request('getAlbumList2', params)
+        except:
+            return None
+    
+    def getAlbumList2_byRecent(self, size=50):
+        """Get recently played albums"""
+        params = {
+            'type': 'recent',
+            'size': size
+        }
+        try:
+            return self._make_request('getAlbumList2', params)
+        except:
+            return None
+    
+    def getGenres(self):
+        """Get all genres"""
+        try:
+            return self._make_request('getGenres')
+        except:
+            return None
+    
+    def getAlbumList2_byGenre(self, genre, size=500):
+        """Get albums by genre"""
+        params = {
+            'type': 'byGenre',
+            'genre': genre,
+            'size': size
+        }
+        try:
+            return self._make_request('getAlbumList2', params)
+        except:
+            return None
+    
+    def getAlbumList2_byYear(self, from_year, to_year, size=500):
+        """Get albums by year range"""
+        params = {
+            'type': 'byYear',
+            'fromYear': from_year,
+            'toYear': to_year,
+            'size': size
+        }
+        try:
+            return self._make_request('getAlbumList2', params)
+        except:
+            return None
 
 class NowPlayingDialog(QDialog):
     """Now playing flyout dialog with track information"""
@@ -250,7 +571,264 @@ class ImageDownloadThread(QThread):
                 if not pixmap.isNull():
                     self.image_ready.emit(pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         except Exception as e:
-            print(f"Error downloading cover art: {e}")
+            logger.error(f"Error downloading cover art: {e}")
+
+class ContextualInfoPanel(QWidget):
+    """Bottom panel showing contextual information about selected items"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Main content area with scroll
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setMaximumHeight(120)
+        self.scroll_area.setMinimumHeight(120)
+        
+        # Content widget
+        self.content_widget = QWidget()
+        self.content_layout = QHBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Default message
+        self.show_default_message()
+        
+        self.scroll_area.setWidget(self.content_widget)
+        layout.addWidget(self.scroll_area)
+        
+        # Style the panel
+        self.setStyleSheet("""
+            ContextualInfoPanel {
+                background-color: #2b2b2b;
+                border-top: 1px solid #555;
+            }
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+        """)
+    
+    def clear_content(self):
+        """Clear all content from the panel"""
+        while self.content_layout.count():
+            child = self.content_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+    
+    def show_default_message(self):
+        """Show default message when nothing is selected"""
+        self.clear_content()
+        label = QLabel("Select an artist, album, or other item to see contextual information here")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet("color: #888; font-style: italic;")
+        self.content_layout.addWidget(label)
+    
+    def show_artist_info(self, artist_data, albums_data=None, sonic_client=None):
+        """Show artist information with albums"""
+        self.clear_content()
+        
+        # Artist info section
+        artist_section = QWidget()
+        artist_layout = QVBoxLayout(artist_section)
+        artist_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Artist name
+        artist_name = QLabel(f"<b>{artist_data.get('name', 'Unknown Artist')}</b>")
+        artist_name.setStyleSheet("font-size: 14px; color: white;")
+        artist_layout.addWidget(artist_name)
+        
+        # Artist stats
+        album_count = len(albums_data) if albums_data else artist_data.get('albumCount', 0)
+        stats = QLabel(f"{album_count} albums")
+        stats.setStyleSheet("color: #ccc; font-size: 12px;")
+        artist_layout.addWidget(stats)
+        
+        artist_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
+        artist_section.setFixedWidth(200)
+        self.content_layout.addWidget(artist_section)
+        
+        # Albums section
+        if albums_data:
+            for album in albums_data[:8]:  # Show max 8 albums
+                album_widget = self.create_album_widget(album, sonic_client)
+                self.content_layout.addWidget(album_widget)
+        
+        self.content_layout.addStretch()
+    
+    def show_album_info(self, album_data, sonic_client=None):
+        """Show album information"""
+        self.clear_content()
+        
+        # Album artwork (if available)
+        if album_data.get('coverArt') and sonic_client:
+            artwork_label = QLabel()
+            artwork_label.setFixedSize(100, 100)
+            artwork_label.setStyleSheet("border: 1px solid #555; background-color: #333;")
+            artwork_label.setText("Loading...")
+            artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Load artwork in thread
+            def load_artwork():
+                try:
+                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=100)
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(image_data)
+                    scaled_pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    artwork_label.setPixmap(scaled_pixmap)
+                    artwork_label.setText("")
+                except:
+                    artwork_label.setText("No Art")
+            
+            QTimer.singleShot(100, load_artwork)
+            self.content_layout.addWidget(artwork_label)
+        
+        # Album info
+        album_section = QWidget()
+        album_layout = QVBoxLayout(album_section)
+        album_layout.setContentsMargins(10, 5, 10, 5)
+        
+        # Album title
+        title = QLabel(f"<b>{album_data.get('name', 'Unknown Album')}</b>")
+        title.setStyleSheet("font-size: 16px; color: white;")
+        album_layout.addWidget(title)
+        
+        # Artist
+        artist = QLabel(f"by {album_data.get('artist', 'Unknown Artist')}")
+        artist.setStyleSheet("color: #ccc; font-size: 14px;")
+        album_layout.addWidget(artist)
+        
+        # Year and track count
+        year = album_data.get('year', '')
+        song_count = album_data.get('songCount', 0)
+        details = []
+        if year:
+            details.append(str(year))
+        if song_count:
+            details.append(f"{song_count} tracks")
+        
+        if details:
+            details_label = QLabel(" • ".join(details))
+            details_label.setStyleSheet("color: #aaa; font-size: 12px;")
+            album_layout.addWidget(details_label)
+        
+        album_section.setStyleSheet("background-color: #333; border-radius: 5px;")
+        self.content_layout.addWidget(album_section)
+        self.content_layout.addStretch()
+    
+    def create_album_widget(self, album_data, sonic_client=None):
+        """Create a small album widget for the contextual panel"""
+        widget = QWidget()
+        widget.setFixedSize(80, 100)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
+        
+        # Album artwork
+        artwork_label = QLabel()
+        artwork_label.setFixedSize(70, 70)
+        artwork_label.setStyleSheet("border: 1px solid #555; background-color: #444;")
+        artwork_label.setText("♪")
+        artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Load artwork if available
+        if album_data.get('coverArt') and sonic_client:
+            def load_artwork():
+                try:
+                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=70)
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(image_data)
+                    scaled_pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    artwork_label.setPixmap(scaled_pixmap)
+                    artwork_label.setText("")
+                except:
+                    pass
+            
+            QTimer.singleShot(100, load_artwork)
+        
+        layout.addWidget(artwork_label)
+        
+        # Album name (truncated)
+        name = album_data.get('name', 'Unknown')
+        if len(name) > 12:
+            name = name[:12] + "..."
+        name_label = QLabel(name)
+        name_label.setStyleSheet("color: white; font-size: 10px;")
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(name_label)
+        
+        widget.setStyleSheet("background-color: #333; border-radius: 3px; margin: 2px;")
+        return widget
+    
+    def show_genre_info(self, genre_name, albums_data=None):
+        """Show genre information with albums"""
+        self.clear_content()
+        
+        # Genre info section
+        genre_section = QWidget()
+        genre_layout = QVBoxLayout(genre_section)
+        genre_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Genre name
+        genre_title = QLabel(f"<b>Genre: {genre_name}</b>")
+        genre_title.setStyleSheet("font-size: 14px; color: white;")
+        genre_layout.addWidget(genre_title)
+        
+        # Genre stats
+        album_count = len(albums_data) if albums_data else 0
+        stats = QLabel(f"{album_count} albums")
+        stats.setStyleSheet("color: #ccc; font-size: 12px;")
+        genre_layout.addWidget(stats)
+        
+        genre_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
+        genre_section.setFixedWidth(200)
+        self.content_layout.addWidget(genre_section)
+        
+        # Albums section
+        if albums_data:
+            for album in albums_data[:8]:  # Show max 8 albums
+                album_widget = self.create_album_widget(album, None)  # No sonic_client for genre view
+                self.content_layout.addWidget(album_widget)
+        
+        self.content_layout.addStretch()
+    
+    def show_decade_info(self, decade_name, albums_data=None):
+        """Show decade information with albums"""
+        self.clear_content()
+        
+        # Decade info section
+        decade_section = QWidget()
+        decade_layout = QVBoxLayout(decade_section)
+        decade_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Decade name
+        decade_title = QLabel(f"<b>{decade_name}</b>")
+        decade_title.setStyleSheet("font-size: 14px; color: white;")
+        decade_layout.addWidget(decade_title)
+        
+        # Decade stats
+        album_count = len(albums_data) if albums_data else 0
+        stats = QLabel(f"{album_count} albums")
+        stats.setStyleSheet("color: #ccc; font-size: 12px;")
+        decade_layout.addWidget(stats)
+        
+        decade_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
+        decade_section.setFixedWidth(200)
+        self.content_layout.addWidget(decade_section)
+        
+        # Albums section
+        if albums_data:
+            for album in albums_data[:8]:  # Show max 8 albums
+                album_widget = self.create_album_widget(album, None)  # No sonic_client for decade view
+                self.content_layout.addWidget(album_widget)
+        
+        self.content_layout.addStretch()
 
 class PyperMainWindow(QMainWindow):
     def __init__(self):
@@ -266,8 +844,23 @@ class PyperMainWindow(QMainWindow):
         self.current_artwork_pixmap = None
         self.search_results = {}  # Store search results
         
+        # Initialize database helper for play counts
+        db_path = CONFIG.get('navidrome', {}).get('database_path')
+        ssh_config = {
+            'ssh_host': CONFIG.get('navidrome', {}).get('ssh_host'),
+            'ssh_user': CONFIG.get('navidrome', {}).get('ssh_user'),
+            'ssh_key_path': CONFIG.get('navidrome', {}).get('ssh_key_path')
+        }
+        self.db_helper = NavidromeDBHelper(db_path, ssh_config)
+        self.play_counts = {}
+        self.most_played_albums = []
+        self.recently_played_albums = []
+        
         # Initialize now playing dialog (keep for backward compatibility)
         self.now_playing_dialog = NowPlayingDialog(self)
+        
+        # Initialize contextual info panel
+        self.contextual_panel = None
         
         # Media player
         self.media_player = QMediaPlayer()
@@ -283,6 +876,13 @@ class PyperMainWindow(QMainWindow):
         
         # Connect to Navidrome
         self.connect_to_navidrome()
+    
+    def closeEvent(self, event):
+        """Handle application close event"""
+        # Clean up temporary database files
+        if hasattr(self, 'db_helper'):
+            self.db_helper.cleanup()
+        event.accept()
         
     def setup_ui(self):
         """Setup the main user interface"""
@@ -485,7 +1085,7 @@ class PyperMainWindow(QMainWindow):
         
         # Category list
         self.category_list = QListWidget()
-        self.category_list.addItems(["Artists", "Albums", "Playlists"])
+        self.category_list.addItems(["Artists", "Albums", "Playlists", "Genres", "Years"])
         self.category_list.setMaximumWidth(120)
         self.category_list.itemClicked.connect(self.category_selected)
         
@@ -592,16 +1192,50 @@ class PyperMainWindow(QMainWindow):
         self.queue_list.customContextMenuRequested.connect(self.show_queue_context_menu)
         queue_layout.addWidget(self.queue_list)
         
+        # Most Played tab
+        most_played_tab = QWidget()
+        most_played_layout = QVBoxLayout(most_played_tab)
+        
+        most_played_header = QLabel("Most Played Albums")
+        most_played_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        most_played_layout.addWidget(most_played_header)
+        
+        self.most_played_list = QListWidget()
+        self.most_played_list.itemDoubleClicked.connect(self.most_played_double_clicked)
+        self.most_played_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.most_played_list.customContextMenuRequested.connect(self.show_most_played_context_menu)
+        most_played_layout.addWidget(self.most_played_list)
+        
+        # Recently Played tab
+        recently_played_tab = QWidget()
+        recently_played_layout = QVBoxLayout(recently_played_tab)
+        
+        recently_played_header = QLabel("Recently Played Albums")
+        recently_played_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        recently_played_layout.addWidget(recently_played_header)
+        
+        self.recently_played_list = QListWidget()
+        self.recently_played_list.itemDoubleClicked.connect(self.recently_played_double_clicked)
+        self.recently_played_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.recently_played_list.customContextMenuRequested.connect(self.show_recently_played_context_menu)
+        recently_played_layout.addWidget(self.recently_played_list)
+        
         # Add tabs
         self.tab_widget.addTab(browse_tab, "Browse")
         self.tab_widget.addTab(search_tab, "Search")
         self.tab_widget.addTab(queue_tab, "Queue")
+        self.tab_widget.addTab(most_played_tab, "Most Played")
+        self.tab_widget.addTab(recently_played_tab, "Recently Played")
         
         browser_layout.addWidget(self.tab_widget)
         content_splitter.addWidget(browser_widget)
         
-        # Set splitter proportions (player at top, browser at bottom)
-        content_splitter.setSizes([150, 500])
+        # Contextual info panel at the bottom
+        self.contextual_panel = ContextualInfoPanel(self)
+        content_splitter.addWidget(self.contextual_panel)
+        
+        # Set splitter proportions (player at top, browser in middle, contextual panel at bottom)
+        content_splitter.setSizes([150, 500, 120])
         
     def setup_connections(self):
         """Setup signal connections"""
@@ -626,7 +1260,7 @@ class PyperMainWindow(QMainWindow):
                 raise Exception("Ping failed - unable to authenticate")
                 
         except Exception as e:
-            print(f"Connection error details: {e}")
+            logger.error(f"Connection error details: {e}")
             QMessageBox.critical(self, "Connection Error", 
                                f"Failed to connect to Navidrome server:\n{str(e)}\n\nPlease check your configuration.")
             self.status_label.setText("Connection failed")
@@ -656,6 +1290,14 @@ class PyperMainWindow(QMainWindow):
         self.subitems_list.clear()
         self.songs_list.clear()
         self.clear_search_results()
+        
+        # Auto-expand artists on startup
+        if self.category_list.count() > 0:
+            self.category_list.setCurrentRow(0)  # Select "Artists"
+            self.category_selected(self.category_list.item(0))
+        
+        # Load play count data and populate new tabs
+        self.load_play_count_data()
     
     def refresh_error(self, error_message):
         """Handle library refresh error"""
@@ -664,11 +1306,15 @@ class PyperMainWindow(QMainWindow):
         QMessageBox.warning(self, "Refresh Error", error_message)
     
     def category_selected(self, item):
-        """Handle category selection (Artists, Albums, Playlists)"""
+        """Handle category selection (Artists, Albums, Playlists, Genres, Years)"""
         category = item.text()
         self.items_list.clear()
         self.subitems_list.clear()
         self.songs_list.clear()
+        
+        # Clear contextual panel when changing categories
+        if self.contextual_panel:
+            self.contextual_panel.show_default_message()
         
         if category == "Artists":
             for artist_group in self.library_data.get('artists', []):
@@ -679,6 +1325,11 @@ class PyperMainWindow(QMainWindow):
         elif category == "Albums":
             for album in self.library_data.get('albums', []):
                 album_title = f"{album['name']} - {album.get('artist', 'Unknown Artist')}"
+                # Add play count if available
+                if album['id'] in self.play_counts:
+                    play_count = self.play_counts[album['id']]['play_count']
+                    if play_count > 0:
+                        album_title += f" ({play_count} plays)"
                 list_item = QListWidgetItem(album_title)
                 list_item.setData(Qt.ItemDataRole.UserRole, album)
                 self.items_list.addItem(list_item)
@@ -686,6 +1337,44 @@ class PyperMainWindow(QMainWindow):
             for playlist in self.library_data.get('playlists', []):
                 list_item = QListWidgetItem(playlist['name'])
                 list_item.setData(Qt.ItemDataRole.UserRole, playlist)
+                self.items_list.addItem(list_item)
+        elif category == "Genres":
+            try:
+                self.status_label.setText("Loading genres...")
+                logger.info("Loading genres from server")
+                genres_response = self.sonic_client.getGenres()
+                genres = genres_response.get('subsonic-response', {}).get('genres', {}).get('genre', [])
+                for genre in genres:
+                    genre_name = genre.get('value', genre.get('name', 'Unknown Genre'))
+                    list_item = QListWidgetItem(genre_name)
+                    list_item.setData(Qt.ItemDataRole.UserRole, {'name': genre_name, 'type': 'genre'})
+                    self.items_list.addItem(list_item)
+                self.status_label.setText(f"Loaded {len(genres)} genres")
+            except Exception as e:
+                logger.error(f"Error loading genres: {e}")
+                self.status_label.setText("Error loading genres")
+        elif category == "Years":
+            # Generate year ranges based on available albums
+            years = set()
+            for album in self.library_data.get('albums', []):
+                year = album.get('year')
+                if year and year > 0:
+                    years.add(year)
+            
+            # Create decade ranges
+            decades = {}
+            for year in sorted(years):
+                decade = (year // 10) * 10
+                decade_label = f"{decade}s"
+                if decade_label not in decades:
+                    decades[decade_label] = {'start': decade, 'end': decade + 9, 'count': 0}
+                decades[decade_label]['count'] += 1
+            
+            # Add decade items
+            for decade_label, decade_info in sorted(decades.items(), key=lambda x: x[1]['start'], reverse=True):
+                display_text = f"{decade_label} ({decade_info['count']} albums)"
+                list_item = QListWidgetItem(display_text)
+                list_item.setData(Qt.ItemDataRole.UserRole, {'name': decade_label, 'type': 'decade', 'start': decade_info['start'], 'end': decade_info['end']})
                 self.items_list.addItem(list_item)
     
     def item_selected(self, item):
@@ -704,11 +1393,21 @@ class PyperMainWindow(QMainWindow):
                 albums = artist_albums.get('subsonic-response', {}).get('artist', {}).get('album', [])
                 for album in albums:
                     album_title = f"{album['name']} ({album.get('year', 'Unknown Year')})"
+                    # Add play count if available
+                    if album['id'] in self.play_counts:
+                        play_count = self.play_counts[album['id']]['play_count']
+                        if play_count > 0:
+                            album_title += f" • {play_count} plays"
                     list_item = QListWidgetItem(album_title)
                     list_item.setData(Qt.ItemDataRole.UserRole, album)
                     self.subitems_list.addItem(list_item)
+                
+                # Show artist info in contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show_artist_info(data, albums, self.sonic_client)
+                    
             except Exception as e:
-                print(f"Error fetching artist albums: {e}")
+                logger.error(f"Error fetching artist albums: {e}")
                 
         elif 'artist' in data and 'name' in data and 'songCount' in data:  # It's an album, show songs directly in pane 4
             try:
@@ -726,8 +1425,13 @@ class PyperMainWindow(QMainWindow):
                 # Load album artwork
                 if 'coverArt' in data:
                     self.load_artwork(data['coverArt'])
+                
+                # Show album info in contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show_album_info(data, self.sonic_client)
+                    
             except Exception as e:
-                print(f"Error fetching album songs: {e}")
+                logger.error(f"Error fetching album songs: {e}")
                 
         elif 'public' in data:  # It's a playlist, show songs directly in pane 4
             try:
@@ -741,7 +1445,51 @@ class PyperMainWindow(QMainWindow):
                     list_item.setData(Qt.ItemDataRole.UserRole, song)
                     self.songs_list.addItem(list_item)
             except Exception as e:
-                print(f"Error fetching playlist songs: {e}")
+                logger.error(f"Error fetching playlist songs: {e}")
+                
+        elif data.get('type') == 'genre':  # It's a genre, show albums in that genre
+            try:
+                self.status_label.setText(f"Loading albums for genre: {data['name']}")
+                genre_albums = self.sonic_client.getAlbumList2_byGenre(data['name'])
+                albums = genre_albums.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
+                for album in albums:
+                    album_title = f"{album['name']} - {album.get('artist', 'Unknown Artist')}"
+                    if album.get('year'):
+                        album_title += f" ({album['year']})"
+                    list_item = QListWidgetItem(album_title)
+                    list_item.setData(Qt.ItemDataRole.UserRole, album)
+                    self.subitems_list.addItem(list_item)
+                
+                # Show genre info in contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show_genre_info(data['name'], albums)
+                    
+                self.status_label.setText(f"Loaded {len(albums)} albums for {data['name']}")
+            except Exception as e:
+                logger.error(f"Error fetching genre albums: {e}")
+                self.status_label.setText("Error loading genre albums")
+                
+        elif data.get('type') == 'decade':  # It's a decade, show albums from that decade
+            try:
+                self.status_label.setText(f"Loading albums from {data['name']}")
+                decade_albums = self.sonic_client.getAlbumList2_byYear(data['start'], data['end'])
+                albums = decade_albums.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
+                for album in albums:
+                    album_title = f"{album['name']} - {album.get('artist', 'Unknown Artist')}"
+                    if album.get('year'):
+                        album_title += f" ({album['year']})"
+                    list_item = QListWidgetItem(album_title)
+                    list_item.setData(Qt.ItemDataRole.UserRole, album)
+                    self.subitems_list.addItem(list_item)
+                
+                # Show decade info in contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show_decade_info(data['name'], albums)
+                    
+                self.status_label.setText(f"Loaded {len(albums)} albums from {data['name']}")
+            except Exception as e:
+                logger.error(f"Error fetching decade albums: {e}")
+                self.status_label.setText("Error loading decade albums")
     
     def artwork_clicked(self, event):
         """Handle clicks on album artwork"""
@@ -764,7 +1512,7 @@ class PyperMainWindow(QMainWindow):
             self.status_label.setText(f"Search complete: '{query}'")
             
         except Exception as e:
-            print(f"Search error: {e}")
+            logger.error(f"Search error: {e}")
             self.status_label.setText("Search failed")
     
     def populate_search_results(self):
@@ -802,6 +1550,143 @@ class PyperMainWindow(QMainWindow):
         self.search_artists_list.clear()
         self.search_albums_list.clear()
         self.search_songs_list.clear()
+    
+    def load_play_count_data(self):
+        """Load play count data from Navidrome database or API"""
+        try:
+            self.status_label.setText("Loading play count data...")
+            
+            # Try database first
+            self.play_counts = self.db_helper.get_album_play_counts()
+            self.most_played_albums = self.db_helper.get_most_played_albums()
+            self.recently_played_albums = self.db_helper.get_recently_played_albums()
+            
+            # If database approach failed, try API fallback
+            if not self.play_counts and not self.most_played_albums:
+                self.status_label.setText("Database unavailable, trying API fallback...")
+                self.load_api_play_data()
+            
+            self.populate_most_played_list()
+            self.populate_recently_played_list()
+            
+            if self.play_counts or self.most_played_albums:
+                source = "database" if self.play_counts else "API"
+                self.status_label.setText(f"Loaded play data from {source}")
+            else:
+                self.status_label.setText("Library refreshed (no play count data available)")
+                
+        except Exception as e:
+            print(f"Error loading play count data: {e}")
+            self.status_label.setText("Library refreshed (play count data unavailable)")
+    
+    def load_api_play_data(self):
+        """Load play data using Navidrome API as fallback"""
+        try:
+            # Try to get frequently played albums
+            frequent_response = self.sonic_client.getAlbumList2_byFrequent(50)
+            if frequent_response:
+                albums = frequent_response.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
+                self.most_played_albums = []
+                for i, album in enumerate(albums):
+                    album_data = album.copy()
+                    album_data['playCount'] = 50 - i  # Estimate based on order
+                    self.most_played_albums.append(album_data)
+            
+            # Try to get recently played albums
+            recent_response = self.sonic_client.getAlbumList2_byRecent(50)
+            if recent_response:
+                albums = recent_response.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
+                self.recently_played_albums = []
+                for album in albums:
+                    album_data = album.copy()
+                    album_data['playCount'] = 1  # Default count
+                    self.recently_played_albums.append(album_data)
+                    
+        except Exception as e:
+            print(f"API fallback failed: {e}")
+    
+    def populate_most_played_list(self):
+        """Populate the most played albums list"""
+        self.most_played_list.clear()
+        for album in self.most_played_albums:
+            album_title = f"{album['name']} - {album['artist']}"
+            if album.get('year'):
+                album_title += f" ({album['year']})"
+            album_title += f" • {album['playCount']} plays"
+            
+            list_item = QListWidgetItem(album_title)
+            list_item.setData(Qt.ItemDataRole.UserRole, album)
+            self.most_played_list.addItem(list_item)
+    
+    def populate_recently_played_list(self):
+        """Populate the recently played albums list"""
+        self.recently_played_list.clear()
+        for album in self.recently_played_albums:
+            album_title = f"{album['name']} - {album['artist']}"
+            if album.get('year'):
+                album_title += f" ({album['year']})"
+            
+            # Format last played date
+            if album.get('lastPlayed'):
+                from datetime import datetime
+                try:
+                    # Assuming ISO format timestamp
+                    dt = datetime.fromisoformat(album['lastPlayed'].replace('Z', '+00:00'))
+                    album_title += f" • Last played: {dt.strftime('%Y-%m-%d')}"
+                except:
+                    album_title += f" • {album['playCount']} plays"
+            
+            list_item = QListWidgetItem(album_title)
+            list_item.setData(Qt.ItemDataRole.UserRole, album)
+            self.recently_played_list.addItem(list_item)
+    
+    def most_played_double_clicked(self, item):
+        """Handle double-click on most played album"""
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data:
+            queue_start_index = len(self.current_queue)
+            self.add_album_songs_to_queue(data)
+            if self.current_queue:
+                self.play_track(queue_start_index)
+    
+    def recently_played_double_clicked(self, item):
+        """Handle double-click on recently played album"""
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data:
+            queue_start_index = len(self.current_queue)
+            self.add_album_songs_to_queue(data)
+            if self.current_queue:
+                self.play_track(queue_start_index)
+    
+    def show_most_played_context_menu(self, position):
+        """Show context menu for most played albums"""
+        item = self.most_played_list.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        add_to_queue_action = menu.addAction("Add to Queue")
+        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(item.data(Qt.ItemDataRole.UserRole)))
+        
+        play_now_action = menu.addAction("Play Now")
+        play_now_action.triggered.connect(lambda: self.most_played_double_clicked(item))
+        
+        menu.exec(self.most_played_list.mapToGlobal(position))
+    
+    def show_recently_played_context_menu(self, position):
+        """Show context menu for recently played albums"""
+        item = self.recently_played_list.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        add_to_queue_action = menu.addAction("Add to Queue")
+        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(item.data(Qt.ItemDataRole.UserRole)))
+        
+        play_now_action = menu.addAction("Play Now")
+        play_now_action.triggered.connect(lambda: self.recently_played_double_clicked(item))
+        
+        menu.exec(self.recently_played_list.mapToGlobal(position))
     
 
     
@@ -1041,8 +1926,13 @@ class PyperMainWindow(QMainWindow):
                 # Load album artwork
                 if 'coverArt' in data:
                     self.load_artwork(data['coverArt'])
+                
+                # Show album info in contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show_album_info(data, self.sonic_client)
+                    
             except Exception as e:
-                print(f"Error fetching album songs: {e}")
+                logger.error(f"Error fetching album songs: {e}")
     
     def song_double_clicked(self, item):
         """Handle double-click on songs in the fourth pane - add to queue and play"""
