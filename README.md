@@ -1,122 +1,221 @@
-Got it. Here are the requested edits incorporated into a revised `README.md`.
-
------
-
 # Pyper - A Modern Navidrome Music Player
 
-Pyper is a clean, modern desktop music player built with Python, designed for seamless Browse and playback from a [Navidrome](https://www.navidrome.org/) music server. It features a fast, multi-pane interface for intuitive library exploration and is built to be lightweight and easy to use.
+A feature-rich, Linux-first music player application designed specifically for Navidrome servers. Built with PyQt6 and featuring a clean, modern interface with robust search capabilities and intuitive workflow.
 
-The entire application is designed to run on Linux and uses the powerful PyQt6 framework for its user interface, styled with `qt-material` for a modern aesthetic without the need for custom image assets.
+## ✨ Features
 
-*(Note: Screenshot shows default theme. Other themes available.)*
+- **🐧 Linux-First Design**: Optimized for Linux desktop environments
+- **🔍 Powerful Search**: Search across artists, albums, and songs with dedicated search tab
+- **🎯 Tabbed Interface**: Browse, Search, and Queue tabs for organized workflow
+- **🎨 Album Art Support**: Automatic album artwork display with proper scaling
+- **📋 Queue Management**: Full playback queue with individual track management and Clear Queue functionality
+- **🎵 Scrobbling**: Last.fm compatible scrobbling through Navidrome
+- **🌙 Modern Theming**: Dark theme with qt-material styling and purple accents
+- **🖱️ Context Menus**: Right-click options throughout the interface
+- **⚡ Smart Playback**: Double-click anywhere to add and play immediately
 
-## Features
+## 📋 Requirements
 
-  * **Three-Pane Browser:** Intuitively drill-down through your music library. The panes are configurable to browse by:
-      * Pane 1: Category (Artists, Albums, Playlists)
-      * Pane 2: Items (e.g., List of all artists)
-      * Pane 3: Sub-Items (e.g., Albums for the selected artist)
-  * **Linux First:** Designed and tested for a native experience on Linux distributions.
-  * **Album & Artist Art:** Displays the cover art for the currently playing album and for artist selections where available.
-  * **Scrobbling via Navidrome:** Pyper reports played tracks back to your Navidrome server. If you have a scrobbling service (like Last.fm) configured in Navidrome, your plays will be logged automatically.
-  * **Song Queueing:** Don't want to create a whole playlist? Just double-click a song or album to add it to the playback queue.
-  * **Library Refresh:** A dedicated refresh button to pull the latest updates from your Navidrome server, ensuring new music is always available.
-  * **Modern Theming:** Ships with several pre-configured themes to change the look and feel instantly. No complex skinning required.
+- Python 3.8+
+- PyQt6
+- Navidrome server (configured and running)
+- Linux desktop environment (tested on Manjaro/Arch)
 
-## Getting Started
+## 🚀 Installation
 
-Follow these instructions to get Pyper running on your local machine.
+### For Manjaro/Arch Linux:
 
-### Prerequisites
+1. **Install system dependencies:**
+   ```bash
+   sudo pacman -S python-pyqt6 python-requests python-pipx
+   ```
 
-  * Python 3.7+
-  * A running Navidrome server instance (with user accounts configured).
+2. **Install Python packages:**
+   ```bash
+   pip install --break-system-packages py-sonic qt-material
+   ```
 
-### Installation
+3. **Clone/download Pyper and set up:**
+   ```bash
+   git clone <repository-url>
+   cd pyper-app
+   ```
 
-#### For Manjaro/Arch Linux:
+4. **Configure your server settings:**
+   ```bash
+   cp config/config.example.json config/config.json
+   # Edit config/config.json with your Navidrome server details
+   ```
 
-1.  **Clone the repository (or save the Python script):**
-    ```bash
-    git clone https://github.com/your-username/pyper.git
-    cd pyper
-    ```
-2.  **Install system packages:**
-    ```bash
-    sudo pacman -S python-pyqt6 python-requests python-pipx
-    ```
-3.  **Install remaining Python packages:**
-    ```bash
-    pip install --break-system-packages py-sonic qt-material
-    ```
+5. **Run Pyper:**
+   ```bash
+   ./run-pyper.sh
+   # or
+   python pyper.py
+   ```
 
-#### For other Linux distributions:
+### Alternative Installation (any Linux):
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/pyper.git
-    cd pyper
-    ```
-2.  **Create a virtual environment:**
-    ```bash
-    python -m venv pyper-venv
-    source pyper-venv/bin/activate
-    ```
-3.  **Install the required Python libraries:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+1. **Create a virtual environment:**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
 
-## Configuration
+2. **Install requirements:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Before launching the application, you must configure it to connect to your Navidrome server. Open the Python script (`pyper.py`) and edit the following lines:
+3. **Configure and run as above**
 
-```python
-# --- Configuration ---
-NAVIDROME_URL = "http://your-navidrome-server.com" # <--- IMPORTANT: Include http/https
-NAVIDROME_USER = "your-username"                 # <--- IMPORTANT
-NAVIDROME_PASS = "your-password"                 # <--- IMPORTANT
+## ⚙️ Configuration
+
+Create your configuration file:
+
+```bash
+cp config/config.example.json config/config.json
 ```
 
-## Usage
+Edit `config/config.json`:
 
-1.  **Run the application:**
-    ```bash
-    python pyper.py
-    ```
-    
-    Or use the provided launch script:
-    ```bash
-    ./run-pyper.sh
-    ```
-2.  **Browse:**
-      * Select a category ("Artists", "Albums", "Playlists") in the first pane.
-      * The second pane will populate with the corresponding items.
-      * Selecting an item in the second pane will populate the third pane with related albums or songs.
-3.  **Queueing Songs:**
-      * Navigate to a list of songs in the third pane (by selecting an album or playlist).
-      * Double-click an item to add all songs from that album/playlist to the main playback queue below.
-      * Double-click a single song in the queue to begin playback.
-4.  **Refreshing the Library:**
-      * Click the "Refresh" button at any time to discard the local cache and fetch the latest library information from your Navidrome server.
-
-## Theming
-
-Pyper includes a selection of themes powered by `qt-material`. You can easily change the active theme by modifying one line in the script.
-
-Find this line in the `if __name__ == '__main__':` block:
-
-```python
-# Apply a modern, clean theme
-apply_stylesheet(app, theme='dark_teal.xml')
+```json
+{
+    "navidrome": {
+        "server_url": "http://your-server:4533",
+        "username": "your_username", 
+        "password": "your_password"
+    },
+    "ui": {
+        "theme": "dark_teal.xml",
+        "window_width": 1400,
+        "window_height": 900
+    }
+}
 ```
 
-Change the `theme` parameter to any of the pre-configured options below.
+**Important**: 
+- Include `http://` or `https://` in your server URL
+- The configuration file is ignored by git for security
+- Never commit your actual credentials
 
-#### Included Themes:
+## 🎵 Usage
 
-  * **Vintage IBM (`light_yellow.xml`)**: A retro theme with a patina'd, off-yellow background reminiscent of classic 1980s computer hardware.
-  * **Synthwave (`dark_purple.xml`)**: A stylish theme with deep purples and pink highlights, perfect for a synthwave aesthetic.
-  * **Oceanic (`dark_blue.xml`)**: A clean and classic dark theme with blue accents.
-  * **Forest (`dark_teal.xml`)**: The default theme, featuring a pleasant dark green/teal look.
-  * **Light (`light_blue.xml`)**: A crisp and clean light theme for daytime use.
+### Navigation Structure
+- **Browse Tab**: Navigate Artists → Albums → Songs hierarchy
+- **Search Tab**: Find content across your entire library
+- **Queue Tab**: Manage your playback queue
+
+### Search Functionality
+1. Type in the search bar at the top
+2. Press Enter or click "Search"
+3. Results appear in Artists | Albums | Songs columns
+4. Double-click or right-click any result to play or queue
+
+### Playback Controls
+- **Double-click** any item to add to queue and start playing
+- **Right-click** for context menu options:
+  - "Add to Queue" - adds without playing
+  - "Play Now" - adds to queue and starts playing immediately
+- **Player Bar**: Compact controls with artwork, progress, and time
+
+### Queue Management
+- **Queue Tab**: Full queue view with clear button
+- **Right-click** queue items for "Remove from Queue" or "Play Now"
+- **Clear Queue** button in Queue tab to empty entire queue
+
+### Album Artwork
+- **Click artwork** in player to show detailed track info dialog
+- Artwork automatically loads and scales properly
+- Large artwork display in now playing dialog
+
+## 🏗️ Project Structure
+
+```
+pyper-app/
+├── src/
+│   └── pyper/
+│       ├── __init__.py        # Package initialization  
+│       └── main.py            # Main application code
+├── config/
+│   ├── config.example.json    # Example configuration
+│   └── config.json           # Your configuration (ignored by git)
+├── docs/                     # Documentation
+├── assets/                   # Assets and resources
+├── pyper.py                  # Entry point script
+├── requirements.txt          # Python dependencies
+├── run-pyper.sh             # Launch script with config check
+├── setup.py                 # Package setup
+├── .gitignore              # Git ignore patterns
+└── README.md               # This file
+```
+
+## 🛠️ Troubleshooting
+
+### Configuration Issues
+```bash
+# Check if config exists
+ls -la config/config.json
+
+# Validate JSON syntax
+python -m json.tool config/config.json
+```
+
+### Connection Issues
+- Verify Navidrome server is running and accessible
+- Test by accessing Navidrome web interface first  
+- Check URL format includes `http://` or `https://`
+- Verify username and password are correct
+
+### Audio Issues
+- Ensure system has proper audio codecs installed
+- Check that other audio applications work
+- Verify Qt multimedia framework is installed
+
+### Dependencies
+```bash
+# System packages (Manjaro/Arch)
+sudo pacman -S python-pyqt6 python-requests
+
+# Python packages
+pip install py-sonic qt-material
+```
+
+## 🔧 Development
+
+### Technology Stack
+- **PyQt6**: Modern Qt bindings for Python
+- **py-sonic**: Subsonic/Navidrome API client  
+- **qt-material**: Material Design theme for Qt
+
+### Running from Source
+```bash
+# Install in development mode
+pip install -e .
+
+# Run with debug output
+python -c "import sys; sys.path.insert(0, 'src'); from pyper.main import main; main()"
+```
+
+### Configuration Management
+- Sensitive data is kept in `config/config.json` (gitignored)
+- Example config shows required structure
+- UI settings are also configurable
+
+## 📄 License
+
+Open source - feel free to modify and distribute.
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit issues and pull requests.
+
+### Development Guidelines
+- Follow existing code style
+- Test with different Navidrome configurations
+- Update documentation for new features
+- Keep sensitive data out of commits
+
+---
+
+**🎵 Enjoy your music with Pyper! A modern player for modern music lovers.**

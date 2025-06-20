@@ -1,40 +1,49 @@
 #!/usr/bin/env python3
+"""
+Setup script for Pyper - A Modern Navidrome Music Player
+"""
 
 from setuptools import setup, find_packages
+import os
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+# Read the README file
+def read_readme():
+    with open("README.md", "r", encoding="utf-8") as fh:
+        return fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+# Read requirements
+def read_requirements():
+    with open("requirements.txt", "r", encoding="utf-8") as fh:
+        return [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setup(
-    name="pyper-music-player",
+    name="pyper",
     version="1.0.0",
-    author="Pyper Development Team",
-    description="A modern desktop music player for Navidrome servers",
-    long_description=long_description,
+    author="Pyper Team",
+    description="A Modern Navidrome Music Player",
+    long_description=read_readme(),
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/pyper",
-    py_modules=["pyper"],
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: End Users/Desktop",
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Topic :: Multimedia :: Sound/Audio :: Players",
     ],
-    python_requires=">=3.7",
-    install_requires=requirements,
+    python_requires=">=3.8",
+    install_requires=read_requirements(),
     entry_points={
         "console_scripts": [
-            "pyper=pyper:main",
+            "pyper=pyper.main:main",
         ],
     },
+    include_package_data=True,
+    zip_safe=False,
 ) 

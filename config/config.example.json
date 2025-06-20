@@ -1,0 +1,12 @@
+{
+    "navidrome": {
+        "server_url": "http://localhost:4533",
+        "username": "your_username",
+        "password": "your_password"
+    },
+    "ui": {
+        "theme": "dark_teal.xml",
+        "window_width": 1400,
+        "window_height": 900
+    }
+} 
