@@ -1,0 +1,22 @@
+{
+    "name": "Tokyo Midnight",
+    "description": "Dark blue theme with neon accents inspired by Tokyo nights",
+    "colors": {
+        "primary": "#7AA2F7",
+        "primary_light": "#9ABCFF",
+        "primary_dark": "#5A82D7",
+        "secondary": "#BB9AF7",
+        "background": "#1A1B26",
+        "surface": "#24283B",
+        "surface_light": "#414868",
+        "text": "#C0CAF5",
+        "text_secondary": "#A9B1D6",
+        "accent": "#73DACA",
+        "border": "#565F89",
+        "hover": "#666F99",
+        "pressed": "#767FA9",
+        "success": "#9ECE6A",
+        "warning": "#E0AF68",
+        "error": "#F7768E"
+    }
+} 

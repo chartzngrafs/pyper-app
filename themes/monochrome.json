@@ -1,0 +1,22 @@
+{
+    "name": "Monochrome",
+    "description": "Clean black, white, and gray theme",
+    "colors": {
+        "primary": "#FFFFFF",
+        "primary_light": "#F0F0F0",
+        "primary_dark": "#E0E0E0",
+        "secondary": "#CCCCCC",
+        "background": "#000000",
+        "surface": "#1A1A1A",
+        "surface_light": "#2A2A2A",
+        "text": "#FFFFFF",
+        "text_secondary": "#CCCCCC",
+        "accent": "#AAAAAA",
+        "border": "#444444",
+        "hover": "#555555",
+        "pressed": "#666666",
+        "success": "#FFFFFF",
+        "warning": "#BBBBBB",
+        "error": "#888888"
+    }
+} 

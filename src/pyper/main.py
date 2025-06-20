@@ -1,43 +1,46 @@
 #!/usr/bin/env python3
+"""
+Pyper - A Modern Navidrome Music Player
+Main application module
+"""
 
 import sys
 import os
-import threading
-import time
-from typing import List, Dict, Any, Optional
-
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QListWidget, QListWidgetItem, QPushButton, QLabel, QSplitter,
-    QMessageBox, QProgressBar, QFrame, QScrollArea, QMenu, QDialog,
-    QTextEdit, QGridLayout, QLineEdit, QTabWidget, QStackedWidget
-)
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
-from PyQt6.QtGui import QPixmap, QFont, QIcon
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-
-import libsonic
-from qt_material import apply_stylesheet
-import hashlib
-import urllib.parse
-import requests
 import json
-import xml.etree.ElementTree as ET
+import hashlib
 import random
 import string
 import sqlite3
-from urllib.parse import urlparse
 import subprocess
 import tempfile
 import shutil
 import logging
+from typing import Optional, Dict, Any
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QListWidget, QListWidgetItem, QPushButton, QLabel, QSplitter,
+    QMessageBox, QScrollArea, QMenu, QDialog, QTextEdit, QLineEdit, 
+    QTabWidget, QProgressBar, QMenuBar
+)
+from PyQt6.QtGui import QAction, QActionGroup, QIcon, QPainter
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
+from PyQt6.QtGui import QPixmap, QFont
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+
+import requests
+from qt_material import apply_stylesheet
 
 # Setup logging
+log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'pyper.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('pyper.log'),
+        logging.FileHandler(log_file),
         logging.StreamHandler()
     ]
 )
@@ -45,6 +48,16 @@ logger = logging.getLogger('Pyper')
 
 # Log startup
 logger.info("Pyper Music Player starting up...")
+
+# --- Constants ---
+DEFAULT_WINDOW_WIDTH = 1400
+DEFAULT_WINDOW_HEIGHT = 900
+PLAYER_BAR_HEIGHT = 100
+CONTEXTUAL_PANEL_HEIGHT = 120
+ARTWORK_SIZE = 80
+THUMBNAIL_SIZE = 70
+MAX_CONTEXTUAL_ALBUMS = 8
+DEFAULT_SEARCH_LIMITS = {'artists': 20, 'albums': 20, 'songs': 50}
 
 # --- Configuration ---
 def load_config():
@@ -68,6 +81,267 @@ CONFIG = load_config()
 NAVIDROME_URL = CONFIG['navidrome']['server_url']
 NAVIDROME_USER = CONFIG['navidrome']['username']
 NAVIDROME_PASS = CONFIG['navidrome']['password']
+
+# Update constants from config if available
+if 'ui' in CONFIG:
+    ui_config = CONFIG['ui']
+    DEFAULT_WINDOW_WIDTH = ui_config.get('window_width', DEFAULT_WINDOW_WIDTH)
+    DEFAULT_WINDOW_HEIGHT = ui_config.get('window_height', DEFAULT_WINDOW_HEIGHT)
+
+class ThemeManager:
+    """Manages application themes and styling"""
+    
+    def __init__(self):
+        self.themes_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'themes')
+        self.current_theme = None
+        self.available_themes = self.load_available_themes()
+        
+    def load_available_themes(self):
+        """Load all available theme definitions"""
+        themes = {}
+        
+        # Add qt-material themes
+        qt_themes = {
+            'dark_teal': {'name': 'Dark Teal (qt-material)', 'qt_theme': 'dark_teal.xml'},
+            'dark_purple': {'name': 'Dark Purple (qt-material)', 'qt_theme': 'dark_purple.xml'},
+            'dark_amber': {'name': 'Dark Amber (qt-material)', 'qt_theme': 'dark_amber.xml'},
+            'dark_blue': {'name': 'Dark Blue (qt-material)', 'qt_theme': 'dark_blue.xml'},
+            'light_teal': {'name': 'Light Teal (qt-material)', 'qt_theme': 'light_teal.xml'},
+            'light_blue': {'name': 'Light Blue (qt-material)', 'qt_theme': 'light_blue.xml'}
+        }
+        themes.update(qt_themes)
+        
+        # Load custom themes from JSON files
+        if os.path.exists(self.themes_dir):
+            for filename in os.listdir(self.themes_dir):
+                if filename.endswith('.json'):
+                    theme_id = filename[:-5]  # Remove .json extension
+                    try:
+                        with open(os.path.join(self.themes_dir, filename), 'r') as f:
+                            theme_data = json.load(f)
+                            themes[theme_id] = theme_data
+                    except Exception as e:
+                        logger.error(f"Failed to load theme {filename}: {e}")
+        
+        return themes
+    
+    def get_theme_list(self):
+        """Get list of theme names for menu"""
+        return [(theme_id, theme_data.get('name', theme_id)) for theme_id, theme_data in self.available_themes.items()]
+    
+    def apply_theme(self, app, theme_id):
+        """Apply a theme to the application"""
+        if theme_id not in self.available_themes:
+            logger.error(f"Theme {theme_id} not found")
+            return False
+            
+        theme_data = self.available_themes[theme_id]
+        
+        try:
+            # Check if it's a qt-material theme
+            if 'qt_theme' in theme_data:
+                apply_stylesheet(app, theme=theme_data['qt_theme'])
+                logger.info(f"Applied qt-material theme: {theme_data['name']}")
+            else:
+                # Apply custom theme
+                self.apply_custom_theme(app, theme_data)
+                logger.info(f"Applied custom theme: {theme_data['name']}")
+            
+            self.current_theme = theme_id
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to apply theme {theme_id}: {e}")
+            return False
+    
+    def get_contrasting_text_color(self, background_color):
+        """Get a contrasting text color (black or white) based on background color"""
+        # Remove # if present
+        bg_color = background_color.lstrip('#')
+        
+        # Convert to RGB
+        try:
+            r = int(bg_color[0:2], 16)
+            g = int(bg_color[2:4], 16)
+            b = int(bg_color[4:6], 16)
+            
+            # Calculate luminance using the relative luminance formula
+            luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            
+            # Return black text for light backgrounds, white text for dark backgrounds
+            return '#000000' if luminance > 0.5 else '#FFFFFF'
+        except:
+            # Fallback to white if color parsing fails
+            return '#FFFFFF'
+    
+    def apply_custom_theme(self, app, theme_data):
+        """Apply a custom theme with CSS styling"""
+        colors = theme_data.get('colors', {})
+        
+        # Create comprehensive stylesheet
+        stylesheet = f"""
+        QMainWindow {{
+            background-color: {colors.get('background', '#212121')};
+            color: {colors.get('text', '#FFFFFF')};
+        }}
+        
+        QWidget {{
+            background-color: {colors.get('background', '#212121')};
+            color: {colors.get('text', '#FFFFFF')};
+        }}
+        
+        QPushButton {{
+            background-color: {colors.get('surface', '#424242')};
+            color: {colors.get('text', '#FFFFFF')};
+            border: 1px solid {colors.get('border', '#757575')};
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-weight: bold;
+            min-width: 60px;
+            min-height: 30px;
+        }}
+        
+        QPushButton:hover {{
+            background-color: {colors.get('hover', '#616161')};
+            border: 1px solid {colors.get('primary', '#009688')};
+        }}
+        
+        QPushButton:pressed {{
+            background-color: {colors.get('pressed', '#757575')};
+        }}
+        
+        QListWidget {{
+            background-color: {colors.get('surface', '#424242')};
+            color: {colors.get('text', '#FFFFFF')};
+            border: 1px solid {colors.get('border', '#757575')};
+            selection-background-color: {colors.get('primary', '#009688')};
+        }}
+        
+        QListWidget::item {{
+            padding: 5px;
+            border: none;
+        }}
+        
+        QListWidget::item:selected {{
+            background-color: {colors.get('primary', '#009688')};
+            color: {self.get_contrasting_text_color(colors.get('primary', '#009688'))};
+        }}
+        
+        QListWidget::item:hover {{
+            background-color: {colors.get('hover', '#616161')};
+        }}
+        
+        QTabWidget::pane {{
+            border: 1px solid {colors.get('border', '#757575')};
+            background-color: {colors.get('surface', '#424242')};
+        }}
+        
+        QTabBar::tab {{
+            background-color: {colors.get('surface_light', '#616161')};
+            color: {colors.get('text_secondary', '#BDBDBD')};
+            padding: 8px 16px;
+            margin-right: 2px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }}
+        
+        QTabBar::tab:selected {{
+            background-color: {colors.get('primary', '#009688')};
+            color: {self.get_contrasting_text_color(colors.get('primary', '#009688'))};
+        }}
+        
+        QTabBar::tab:hover {{
+            background-color: {colors.get('hover', '#616161')};
+        }}
+        
+        QLineEdit {{
+            background-color: {colors.get('surface', '#424242')};
+            color: {colors.get('text', '#FFFFFF')};
+            border: 1px solid {colors.get('border', '#757575')};
+            border-radius: 4px;
+            padding: 5px;
+        }}
+        
+        QLineEdit:focus {{
+            border: 2px solid {colors.get('primary', '#009688')};
+        }}
+        
+        QLabel {{
+            color: {colors.get('text', '#FFFFFF')};
+        }}
+        
+        QProgressBar {{
+            background-color: {colors.get('surface', '#424242')};
+            border: 1px solid {colors.get('border', '#757575')};
+            border-radius: 5px;
+            text-align: center;
+        }}
+        
+        QProgressBar::chunk {{
+            background-color: {colors.get('primary', '#009688')};
+            border-radius: 4px;
+        }}
+        
+        QScrollArea {{
+            background-color: {colors.get('surface', '#424242')};
+            border: 1px solid {colors.get('border', '#757575')};
+        }}
+        
+        QMenu {{
+            background-color: {colors.get('surface', '#424242')};
+            color: {colors.get('text', '#FFFFFF')};
+            border: 1px solid {colors.get('border', '#757575')};
+        }}
+        
+        QMenu::item {{
+            padding: 5px 20px;
+        }}
+        
+        QMenu::item:selected {{
+            background-color: {colors.get('primary', '#009688')};
+            color: {self.get_contrasting_text_color(colors.get('primary', '#009688'))};
+        }}
+        
+        QMenuBar {{
+            background-color: {colors.get('surface', '#424242')};
+            color: {colors.get('text', '#FFFFFF')};
+            border-bottom: 1px solid {colors.get('border', '#757575')};
+        }}
+        
+        QMenuBar::item {{
+            padding: 5px 10px;
+        }}
+        
+        QMenuBar::item:selected {{
+            background-color: {colors.get('primary', '#009688')};
+            color: {self.get_contrasting_text_color(colors.get('primary', '#009688'))};
+        }}
+        """
+        
+        app.setStyleSheet(stylesheet)
+    
+    def save_theme_preference(self, theme_id):
+        """Save theme preference to config"""
+        try:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config', 'config.json')
+            
+            # Read current config
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Update theme
+            if 'ui' not in config:
+                config['ui'] = {}
+            config['ui']['theme'] = theme_id
+            
+            # Write back to file
+            with open(config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+                
+            logger.info(f"Saved theme preference: {theme_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save theme preference: {e}")
 
 class NavidromeDBHelper:
     """Helper class to access Navidrome's SQLite database for play counts and stats"""
@@ -112,7 +386,7 @@ class NavidromeDBHelper:
         try:
             return sqlite3.connect(db_to_use, timeout=5.0)
         except Exception as e:
-            print(f"Database connection error: {e}")
+            logger.error(f"Database connection error: {e}")
             return None
     
     def get_remote_database(self):
@@ -148,20 +422,20 @@ class NavidromeDBHelper:
             remote_source = f"{ssh_user}@{ssh_host}:{remote_path}"
             scp_cmd.extend([remote_source, self.temp_db_path])
             
-            print(f"Copying database from {remote_source}...")
+            logger.info(f"Copying database from {remote_source}...")
             
             # Execute SCP command
             result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
-                print(f"Database copied successfully to {self.temp_db_path}")
+                logger.info(f"Database copied successfully to {self.temp_db_path}")
                 return self.temp_db_path
             else:
-                print(f"SCP failed: {result.stderr}")
+                logger.error(f"SCP failed: {result.stderr}")
                 return None
                 
         except subprocess.TimeoutExpired:
-            print("Database copy timed out")
+            logger.error("Database copy timed out")
             return None
         except Exception as e:
             logger.error(f"Error copying remote database: {e}")
@@ -173,7 +447,7 @@ class NavidromeDBHelper:
             try:
                 temp_dir = os.path.dirname(self.temp_db_path)
                 shutil.rmtree(temp_dir)
-                print("Cleaned up temporary database files")
+                logger.info("Cleaned up temporary database files")
             except Exception as e:
                 logger.error(f"Error cleaning up temp files: {e}")
     
@@ -395,8 +669,13 @@ class CustomSubsonicClient:
             params['submission'] = 'true'
         return self._make_request('scrobble', params)
     
-    def search3(self, query, artist_count=20, album_count=20, song_count=50):
+    def search3(self, query, artist_count=None, album_count=None, song_count=None):
         """Search for artists, albums, and songs"""
+        # Use default limits if not specified
+        artist_count = artist_count or DEFAULT_SEARCH_LIMITS['artists']
+        album_count = album_count or DEFAULT_SEARCH_LIMITS['albums']
+        song_count = song_count or DEFAULT_SEARCH_LIMITS['songs']
+        
         params = {
             'query': query,
             'artistCount': artist_count,
@@ -589,8 +868,8 @@ class ContextualInfoPanel(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.scroll_area.setMaximumHeight(120)
-        self.scroll_area.setMinimumHeight(120)
+        self.scroll_area.setMaximumHeight(CONTEXTUAL_PANEL_HEIGHT)
+        self.scroll_area.setMinimumHeight(CONTEXTUAL_PANEL_HEIGHT)
         
         # Content widget
         self.content_widget = QWidget()
@@ -656,7 +935,7 @@ class ContextualInfoPanel(QWidget):
         
         # Albums section
         if albums_data:
-            for album in albums_data[:8]:  # Show max 8 albums
+            for album in albums_data[:MAX_CONTEXTUAL_ALBUMS]:  # Show max albums
                 album_widget = self.create_album_widget(album, sonic_client)
                 self.content_layout.addWidget(album_widget)
         
@@ -666,13 +945,30 @@ class ContextualInfoPanel(QWidget):
         """Show album information"""
         self.clear_content()
         
+        # Create a horizontal layout for artwork and info side by side
+        album_container = QWidget()
+        album_container_layout = QHBoxLayout(album_container)
+        album_container_layout.setContentsMargins(0, 0, 0, 0)
+        album_container_layout.setSpacing(10)
+        
         # Album artwork (if available)
+        artwork_section = QWidget()
+        artwork_section.setFixedSize(100, 100)
+        artwork_section.setStyleSheet("background-color: #333; border: 1px solid #555; border-radius: 5px;")
+        
+        artwork_layout = QVBoxLayout(artwork_section)
+        artwork_layout.setContentsMargins(0, 0, 0, 0)
+        artwork_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        artwork_label = QLabel()
+        artwork_label.setText("♪")
+        artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        artwork_label.setStyleSheet("border: none; background: transparent; color: #888; font-size: 24px;")
+        artwork_layout.addWidget(artwork_label)
+        
         if album_data.get('coverArt') and sonic_client:
-            artwork_label = QLabel()
-            artwork_label.setFixedSize(100, 100)
-            artwork_label.setStyleSheet("border: 1px solid #555; background-color: #333;")
             artwork_label.setText("Loading...")
-            artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            artwork_label.setStyleSheet("border: none; background: transparent; color: #888; font-size: 12px;")
             
             # Load artwork in thread
             def load_artwork():
@@ -680,28 +976,38 @@ class ContextualInfoPanel(QWidget):
                     image_data = sonic_client.getCoverArt(album_data['coverArt'], size=100)
                     pixmap = QPixmap()
                     pixmap.loadFromData(image_data)
-                    scaled_pixmap = pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    
+                    # Scale maintaining aspect ratio, with padding for the container
+                    scaled_pixmap = pixmap.scaled(98, 98, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     artwork_label.setPixmap(scaled_pixmap)
                     artwork_label.setText("")
                 except:
                     artwork_label.setText("No Art")
+                    artwork_label.setStyleSheet("border: none; background: transparent; color: #888; font-size: 12px;")
             
             QTimer.singleShot(100, load_artwork)
-            self.content_layout.addWidget(artwork_label)
         
-        # Album info
-        album_section = QWidget()
-        album_layout = QVBoxLayout(album_section)
-        album_layout.setContentsMargins(10, 5, 10, 5)
+        album_container_layout.addWidget(artwork_section)
+        
+        # Album info section - same height as artwork
+        album_info_section = QWidget()
+        album_info_section.setFixedHeight(100)
+        album_info_section.setStyleSheet("background-color: #333; border-radius: 5px; padding: 5px;")
+        
+        album_layout = QVBoxLayout(album_info_section)
+        album_layout.setContentsMargins(10, 10, 10, 10)
+        album_layout.setSpacing(5)
         
         # Album title
         title = QLabel(f"<b>{album_data.get('name', 'Unknown Album')}</b>")
         title.setStyleSheet("font-size: 16px; color: white;")
+        title.setWordWrap(True)
         album_layout.addWidget(title)
         
         # Artist
         artist = QLabel(f"by {album_data.get('artist', 'Unknown Artist')}")
         artist.setStyleSheet("color: #ccc; font-size: 14px;")
+        artist.setWordWrap(True)
         album_layout.addWidget(artist)
         
         # Year and track count
@@ -718,8 +1024,13 @@ class ContextualInfoPanel(QWidget):
             details_label.setStyleSheet("color: #aaa; font-size: 12px;")
             album_layout.addWidget(details_label)
         
-        album_section.setStyleSheet("background-color: #333; border-radius: 5px;")
-        self.content_layout.addWidget(album_section)
+        # Add stretch to push content to top
+        album_layout.addStretch()
+        
+        album_container_layout.addWidget(album_info_section)
+        album_container_layout.addStretch()  # Push everything to the left
+        
+        self.content_layout.addWidget(album_container)
         self.content_layout.addStretch()
     
     def create_album_widget(self, album_data, sonic_client=None):
@@ -732,19 +1043,22 @@ class ContextualInfoPanel(QWidget):
         
         # Album artwork
         artwork_label = QLabel()
-        artwork_label.setFixedSize(70, 70)
+        artwork_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
         artwork_label.setStyleSheet("border: 1px solid #555; background-color: #444;")
         artwork_label.setText("♪")
         artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         
         # Load artwork if available
         if album_data.get('coverArt') and sonic_client:
             def load_artwork():
                 try:
-                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=70)
+                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=THUMBNAIL_SIZE)
                     pixmap = QPixmap()
                     pixmap.loadFromData(image_data)
-                    scaled_pixmap = pixmap.scaled(70, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    
+                    # Scale maintaining aspect ratio, but leave some padding for border
+                    scaled_pixmap = pixmap.scaled(THUMBNAIL_SIZE-2, THUMBNAIL_SIZE-2, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     artwork_label.setPixmap(scaled_pixmap)
                     artwork_label.setText("")
                 except:
@@ -792,7 +1106,7 @@ class ContextualInfoPanel(QWidget):
         
         # Albums section
         if albums_data:
-            for album in albums_data[:8]:  # Show max 8 albums
+            for album in albums_data[:MAX_CONTEXTUAL_ALBUMS]:  # Show max albums
                 album_widget = self.create_album_widget(album, None)  # No sonic_client for genre view
                 self.content_layout.addWidget(album_widget)
         
@@ -824,7 +1138,7 @@ class ContextualInfoPanel(QWidget):
         
         # Albums section
         if albums_data:
-            for album in albums_data[:8]:  # Show max 8 albums
+            for album in albums_data[:MAX_CONTEXTUAL_ALBUMS]:  # Show max albums
                 album_widget = self.create_album_widget(album, None)  # No sonic_client for decade view
                 self.content_layout.addWidget(album_widget)
         
@@ -835,6 +1149,10 @@ class PyperMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Pyper - Modern Navidrome Music Player")
         self.setMinimumSize(CONFIG['ui']['window_width'], CONFIG['ui']['window_height'])
+        
+        # Initialize theme manager
+        self.theme_manager = ThemeManager()
+        self.app = QApplication.instance()
         
         # Initialize Navidrome connection
         self.sonic_client = None
@@ -874,6 +1192,13 @@ class PyperMainWindow(QMainWindow):
         self.setup_ui()
         self.setup_connections()
         
+        # Set window properties
+        self.setWindowTitle("Pyper - Modern Navidrome Player")
+        self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        
+        # Set application icon
+        self.set_application_icon()
+        
         # Connect to Navidrome
         self.connect_to_navidrome()
     
@@ -886,6 +1211,9 @@ class PyperMainWindow(QMainWindow):
         
     def setup_ui(self):
         """Setup the main user interface"""
+        # Create menu bar
+        self.create_menu_bar()
+        
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -959,13 +1287,13 @@ class PyperMainWindow(QMainWindow):
         
         # Player bar at top (with proper height)
         player_widget = QWidget()
-        player_widget.setMinimumHeight(100)
-        player_widget.setMaximumHeight(120)
+        player_widget.setMinimumHeight(PLAYER_BAR_HEIGHT)
+        player_widget.setMaximumHeight(PLAYER_BAR_HEIGHT + 20)
         player_layout = QHBoxLayout(player_widget)
         
         # Album artwork (properly sized)
         self.artwork_label = QLabel()
-        self.artwork_label.setFixedSize(80, 80)
+        self.artwork_label.setFixedSize(ARTWORK_SIZE, ARTWORK_SIZE)
         self.artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.artwork_label.setScaledContents(True)  # Enable proper scaling
         self.artwork_label.setStyleSheet("""
@@ -1237,9 +1565,102 @@ class PyperMainWindow(QMainWindow):
         # Set splitter proportions (player at top, browser in middle, contextual panel at bottom)
         content_splitter.setSizes([150, 500, 120])
         
+    def create_menu_bar(self):
+        """Create the application menu bar with theme selection"""
+        menubar = self.menuBar()
+        
+        # View menu
+        view_menu = menubar.addMenu('View')
+        
+        # Theme submenu
+        theme_menu = view_menu.addMenu('Themes')
+        
+        # Create action group for theme selection
+        self.theme_action_group = QActionGroup(self)
+        self.theme_action_group.setExclusive(True)
+        
+        # Get current theme from config
+        current_theme = CONFIG.get('ui', {}).get('theme', 'dark_teal')
+        
+        # Add theme actions
+        for theme_id, theme_name in self.theme_manager.get_theme_list():
+            action = QAction(theme_name, self)
+            action.setCheckable(True)
+            action.setData(theme_id)
+            
+            # Check current theme
+            if theme_id == current_theme or (current_theme.endswith('.xml') and theme_id == current_theme[:-4]):
+                action.setChecked(True)
+            
+            action.triggered.connect(lambda checked, t_id=theme_id: self.change_theme(t_id))
+            
+            self.theme_action_group.addAction(action)
+            theme_menu.addAction(action)
+        
+        # Add separator and theme info
+        theme_menu.addSeparator()
+        info_action = QAction('About Themes...', self)
+        info_action.triggered.connect(self.show_theme_info)
+        theme_menu.addAction(info_action)
+        
     def setup_connections(self):
         """Setup signal connections"""
         pass
+    
+    def create_context_menu(self, item, add_callback, play_callback):
+        """Create a standard context menu for items"""
+        menu = QMenu(self)
+        
+        add_action = menu.addAction("Add to Queue")
+        add_action.triggered.connect(lambda: add_callback(item))
+        
+        play_action = menu.addAction("Play Now")
+        play_action.triggered.connect(lambda: play_callback(item))
+        
+        return menu
+    
+    def change_theme(self, theme_id):
+        """Change the application theme"""
+        logger.info(f"Changing theme to: {theme_id}")
+        
+        # Apply the theme
+        if self.theme_manager.apply_theme(self.app, theme_id):
+            # Save preference
+            self.theme_manager.save_theme_preference(theme_id)
+            self.status_label.setText(f"Theme changed to: {self.theme_manager.available_themes[theme_id].get('name', theme_id)}")
+        else:
+            self.status_label.setText("Failed to apply theme")
+            QMessageBox.warning(self, "Theme Error", f"Failed to apply theme: {theme_id}")
+    
+    def show_theme_info(self):
+        """Show information about available themes"""
+        info_text = "Available Themes:\n\n"
+        
+        for theme_id, theme_data in self.theme_manager.available_themes.items():
+            name = theme_data.get('name', theme_id)
+            description = theme_data.get('description', 'No description available')
+            info_text += f"• {name}\n  {description}\n\n"
+        
+        info_text += "\nCustom themes are loaded from the 'themes' directory.\n"
+        info_text += "You can create your own themes by adding JSON files to that directory."
+        
+        QMessageBox.information(self, "Theme Information", info_text)
+    
+    def set_application_icon(self):
+        """Set the application icon"""
+        try:
+            # Try to use the custom icon from assets directory
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets', 'pyper-icon.png')
+            if os.path.exists(icon_path):
+                icon = QIcon(icon_path)
+                self.setWindowIcon(icon)
+                # Also set for the application
+                QApplication.instance().setWindowIcon(icon)
+                logger.info(f"Application icon set from: {icon_path}")
+            else:
+                logger.warning(f"Icon file not found at: {icon_path}")
+        except Exception as e:
+            logger.error(f"Failed to set application icon: {e}")
         
     def connect_to_navidrome(self):
         """Connect to the Navidrome server"""
@@ -2126,7 +2547,7 @@ class PyperMainWindow(QMainWindow):
                 self.scrobble_track(song['id'])
                 
             except Exception as e:
-                print(f"Error playing track: {e}")
+                logger.error(f"Error playing track: {e}")
                 QMessageBox.warning(self, "Playback Error", f"Failed to play track: {str(e)}")
     
     def play_pause(self):
@@ -2204,7 +2625,7 @@ class PyperMainWindow(QMainWindow):
             # Navidrome handles scrobbling automatically when we stream
             self.sonic_client.scrobble(song_id)
         except Exception as e:
-            print(f"Scrobbling error: {e}")
+            logger.error(f"Scrobbling error: {e}")
     
     @staticmethod
     def format_duration(seconds):
@@ -2214,15 +2635,28 @@ class PyperMainWindow(QMainWindow):
         return f"{minutes:02d}:{seconds:02d}"
 
 def main():
+    """Main application entry point"""
     app = QApplication(sys.argv)
-    
-    # Apply a modern, clean theme
-    apply_stylesheet(app, theme=CONFIG['ui']['theme'])
     
     # Create and show the main window
     window = PyperMainWindow()
+    
+    # Apply initial theme
+    try:
+        theme_id = CONFIG.get('ui', {}).get('theme', 'dark_teal')
+        # Handle legacy .xml theme names
+        if theme_id.endswith('.xml'):
+            theme_id = theme_id[:-4]
+        
+        logger.info(f"Applying initial theme: {theme_id}")
+        window.theme_manager.apply_theme(app, theme_id)
+    except Exception as e:
+        logger.error(f"Failed to apply initial theme: {e}")
+        logger.info("Continuing with default theme")
+    
     window.show()
     
+    logger.info("Pyper application started successfully")
     sys.exit(app.exec())
 
 if __name__ == '__main__':

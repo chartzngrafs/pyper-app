@@ -1,6 +1,6 @@
 # Pyper - A Modern Navidrome Music Player
 
-A feature-rich, Linux-first music player application designed specifically for Navidrome servers. Built with PyQt6 and featuring a clean, modern interface with robust search capabilities, contextual information display, and intuitive workflow.
+A feature-rich, Linux-first music player application designed specifically for Navidrome servers. Built with PyQt6 and featuring a clean, modern interface with robust search capabilities, contextual information display, and comprehensive theming system.
 
 ## ✨ Features
 
@@ -10,15 +10,39 @@ A feature-rich, Linux-first music player application designed specifically for N
 - **🎨 Contextual Information Panel**: Dynamic bottom panel showing artist info, album details, and artwork based on your selection
 - **🎵 Multi-Category Navigation**: Browse by Artists, Albums, Playlists, Genres, and Years (decades)
 - **📊 Play Count Integration**: Display play counts from Navidrome database with remote SSH access support
-- **🎨 Album Art Support**: Automatic album artwork display with proper scaling and contextual thumbnails
+- **🎨 Album Art Support**: Automatic album artwork display with proper scaling, centering, and contextual thumbnails
 - **📋 Queue Management**: Full playback queue with individual track management and Clear Queue functionality
 - **🎵 Scrobbling**: Last.fm compatible scrobbling through Navidrome
-- **🌙 Modern Theming**: Dark theme with qt-material styling and purple accents
+- **🌈 Comprehensive Theming System**: 8 custom themes plus qt-material themes with automatic text contrast
 - **🖱️ Context Menus**: Right-click options throughout the interface
 - **⚡ Smart Playback**: Double-click anywhere to add and play immediately
 - **🚀 Auto-Expand**: Artists automatically expanded on startup for immediate browsing
 - **📝 Comprehensive Logging**: File and console logging for debugging and monitoring
 - **🔗 Remote Database Access**: SSH-based access to remote Navidrome databases for play count data
+- **🎯 Improved Album Layout**: Side-by-side artwork and info display with equal heights for better visual balance
+
+## 🎨 Theming System
+
+Pyper includes a comprehensive theming system with **8 custom themes** plus qt-material themes:
+
+### Custom Themes
+1. **Dark Teal** (Default) - Professional dark teal with electric accents
+2. **Cobalt Blue** - Deep cobalt blue with electric blue highlights
+3. **IBM Patina Yellow** - Warm patina yellow inspired by IBM vintage computing
+4. **Hacker Green** - Matrix-inspired green terminal theme
+5. **Dracula** - Dark theme with purple accents inspired by the popular Dracula color scheme
+6. **Tokyo Midnight** - Dark blue theme with neon accents inspired by Tokyo's nightlife
+7. **Monochrome** - Clean black, white, and gray professional theme
+8. **Synthwave '84** - Authentic 80s synthwave theme with neon pink, green, and yellow
+
+### Theme Features
+- **Automatic Text Contrast**: Intelligent contrast calculation ensures readable text on all backgrounds
+- **Real-time Switching**: Change themes instantly via View → Themes menu
+- **Persistent Preferences**: Theme selection is saved and restored on startup
+- **Comprehensive Coverage**: All UI elements styled consistently across themes
+- **Accessibility**: Proper contrast ratios for better readability
+
+Access themes via **View → Themes** in the menu bar.
 
 ## 📋 Requirements
 
@@ -38,12 +62,12 @@ A feature-rich, Linux-first music player application designed specifically for N
    ```
 
 2. **Install Python packages:**
-   ```bash
+    ```bash
    pip install --break-system-packages py-sonic qt-material
-   ```
+    ```
 
 3. **Clone/download Pyper and set up:**
-   ```bash
+    ```bash
    git clone <repository-url>
    cd pyper-app
    ```
@@ -55,11 +79,11 @@ A feature-rich, Linux-first music player application designed specifically for N
    ```
 
 5. **Run Pyper:**
-   ```bash
+    ```bash
    ./run-pyper.sh
    # or
-   python pyper.py
-   ```
+    python pyper.py
+    ```
 
 ### Alternative Installation (any Linux):
 
@@ -159,9 +183,10 @@ The bottom panel dynamically displays relevant information based on your selecti
 
 ### Album Artwork
 - **Click artwork** in player to show detailed track info dialog
-- Artwork automatically loads and scales properly
-- Large artwork display in now playing dialog
-- Contextual thumbnails in bottom panel
+- **Centered Display**: Artwork is properly centered in all contexts
+- **Side-by-Side Layout**: Album info shows artwork and details side-by-side with equal heights
+- **Contextual thumbnails**: Small album art previews in bottom panel
+- **Proper Scaling**: Maintains aspect ratio while fitting containers perfectly
 
 ### Logging
 - Application events logged to `pyper.log` in the application directory
@@ -269,6 +294,16 @@ pip install py-sonic qt-material
 - **[Installation Guide](install-shortcut.sh)**: Desktop integration setup
 
 ## 🎯 Recent Updates
+
+### v2.1 - Comprehensive Theming & UI Polish
+- Added **comprehensive theming system** with 8 custom themes
+- Implemented **automatic text contrast calculation** for all themes
+- Created **side-by-side album layout** with equal height artwork and info sections
+- Fixed **album artwork centering** issues across all display contexts
+- Added **real-time theme switching** with persistent preferences
+- Included **authentic Synthwave '84 theme** with proper neon colors
+- Enhanced **accessibility** with proper contrast ratios in all themes
+- Improved **visual consistency** across all UI elements
 
 ### v2.0 - Enhanced Navigation & Contextual Interface
 - Added **Genres** and **Years** navigation categories

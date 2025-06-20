@@ -160,6 +160,7 @@ Thumbs.db
 
 # Log files
 *.log
+logs/
 
 # Cache
 .cache/ 

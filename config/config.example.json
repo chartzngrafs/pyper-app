@@ -9,8 +9,27 @@
         "ssh_key_path": "~/.ssh/id_rsa"
     },
     "ui": {
-        "theme": "dark_teal.xml",
+        "theme": "dark_teal",
         "window_width": 1400,
         "window_height": 900
+    },
+    "_theme_options": {
+        "qt_material_themes": [
+            "dark_teal",
+            "dark_purple", 
+            "dark_amber",
+            "dark_blue",
+            "light_teal",
+            "light_blue"
+        ],
+        "custom_themes": [
+            "cobalt_blue",
+            "ibm_patina_yellow",
+            "hacker_green",
+            "dracula",
+            "tokyo_midnight",
+            "monochrome",
+            "synthwave84"
+        ]
     }
 } 

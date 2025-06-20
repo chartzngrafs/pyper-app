@@ -1,0 +1,22 @@
+{
+    "name": "Dark Teal",
+    "description": "Default dark teal theme (qt-material)",
+    "colors": {
+        "primary": "#009688",
+        "primary_light": "#4DB6AC",
+        "primary_dark": "#00695C",
+        "secondary": "#00BCD4",
+        "background": "#212121",
+        "surface": "#424242",
+        "surface_light": "#616161",
+        "text": "#FFFFFF",
+        "text_secondary": "#BDBDBD",
+        "accent": "#80CBC4",
+        "border": "#757575",
+        "hover": "#858585",
+        "pressed": "#959595",
+        "success": "#4CAF50",
+        "warning": "#FF9800",
+        "error": "#F44336"
+    }
+} 

@@ -1,0 +1,22 @@
+{
+    "name": "Cobalt Blue",
+    "description": "Deep cobalt blue theme with electric accents",
+    "colors": {
+        "primary": "#0047AB",
+        "primary_light": "#1E5BC6",
+        "primary_dark": "#003580",
+        "secondary": "#00BFFF",
+        "background": "#0A1628",
+        "surface": "#1A2B42",
+        "surface_light": "#2A3B52",
+        "text": "#E8F4FD",
+        "text_secondary": "#B8D4ED",
+        "accent": "#00D4FF",
+        "border": "#3A4B62",
+        "hover": "#4A5B72",
+        "pressed": "#5A6B82",
+        "success": "#00FF7F",
+        "warning": "#FFD700",
+        "error": "#FF4444"
+    }
+} 

@@ -1,0 +1,22 @@
+{
+    "name": "Hacker Green",
+    "description": "Matrix-inspired green terminal theme",
+    "colors": {
+        "primary": "#00FF00",
+        "primary_light": "#32FF32",
+        "primary_dark": "#00CC00",
+        "secondary": "#00FF7F",
+        "background": "#000000",
+        "surface": "#0A0A0A",
+        "surface_light": "#1A1A1A",
+        "text": "#00FF00",
+        "text_secondary": "#00CC00",
+        "accent": "#39FF14",
+        "border": "#2A2A2A",
+        "hover": "#3A3A3A",
+        "pressed": "#4A4A4A",
+        "success": "#00FF00",
+        "warning": "#FFFF00",
+        "error": "#FF0000"
+    }
+} 
