@@ -15,6 +15,9 @@ import subprocess
 import tempfile
 import shutil
 import logging
+import urllib.request
+import urllib.parse
+import re
 from typing import Optional, Dict, Any
 
 from PyQt6.QtWidgets import (
@@ -747,6 +750,13 @@ class CustomSubsonicClient:
             return self._make_request('getAlbumList2', params)
         except:
             return None
+    
+    def getInternetRadioStations(self):
+        """Get all internet radio stations"""
+        try:
+            return self._make_request('getInternetRadioStations')
+        except:
+            return None
 
 class NowPlayingDialog(QDialog):
     """Now playing flyout dialog with track information"""
@@ -826,6 +836,13 @@ class LibraryRefreshThread(QThread):
             playlists = self.sonic_client.getPlaylists()
             library_data['playlists'] = playlists.get('subsonic-response', {}).get('playlists', {}).get('playlist', [])
             
+            self.progress.emit("Fetching radio stations...")
+            radio_stations = self.sonic_client.getInternetRadioStations()
+            if radio_stations:
+                library_data['radio_stations'] = radio_stations.get('subsonic-response', {}).get('internetRadioStations', {}).get('internetRadioStation', [])
+            else:
+                library_data['radio_stations'] = []
+            
             self.progress.emit("Library refresh complete!")
             self.finished.emit(library_data)
             
@@ -851,6 +868,441 @@ class ImageDownloadThread(QThread):
                     self.image_ready.emit(pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
         except Exception as e:
             logger.error(f"Error downloading cover art: {e}")
+
+class ICYMetadataParser(QThread):
+    """Thread for parsing ICY metadata from radio streams"""
+    metadata_updated = pyqtSignal(dict)
+    artwork_ready = pyqtSignal(QPixmap)
+    
+    def __init__(self, stream_url):
+        super().__init__()
+        self.stream_url = stream_url
+        self.running = False
+        self.current_track = {}
+        
+    def run(self):
+        """Monitor ICY metadata from the stream"""
+        self.running = True
+        
+        while self.running:
+            try:
+                self.fetch_icy_metadata()
+                self.msleep(10000)  # Check every 10 seconds
+            except Exception as e:
+                logger.error(f"ICY metadata error: {e}")
+                self.msleep(5000)  # Wait 5 seconds before retry
+    
+    def stop(self):
+        """Stop the metadata monitoring"""
+        self.running = False
+        
+    def fetch_icy_metadata(self):
+        """Fetch ICY metadata from the stream"""
+        try:
+            # Create request with ICY metadata headers
+            req = urllib.request.Request(self.stream_url)
+            req.add_header('Icy-MetaData', '1')
+            req.add_header('User-Agent', 'Pyper/1.0')
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                # Check if ICY metadata is supported
+                icy_metaint = response.headers.get('icy-metaint')
+                if not icy_metaint:
+                    return
+                    
+                metaint = int(icy_metaint)
+                
+                # Read stream data up to metadata block
+                stream_data = response.read(metaint)
+                
+                # Read metadata length
+                meta_length_byte = response.read(1)
+                if not meta_length_byte:
+                    return
+                    
+                meta_length = ord(meta_length_byte) * 16
+                
+                if meta_length > 0:
+                    # Read metadata
+                    metadata_bytes = response.read(meta_length)
+                    metadata_str = metadata_bytes.decode('utf-8', errors='ignore').strip('\x00')
+                    
+                    # Parse metadata
+                    self.parse_metadata(metadata_str)
+                    
+        except Exception as e:
+            logger.debug(f"ICY metadata fetch error: {e}")
+    
+    def parse_metadata(self, metadata_str):
+        """Parse ICY metadata string"""
+        if not metadata_str:
+            return
+            
+        # Extract StreamTitle
+        title_match = re.search(r"StreamTitle='([^']*)'", metadata_str)
+        if not title_match:
+            return
+            
+        stream_title = title_match.group(1)
+        if not stream_title or stream_title == self.current_track.get('title', ''):
+            return  # No change
+            
+        # Parse artist and title (common formats: "Artist - Title" or "Title")
+        if ' - ' in stream_title:
+            parts = stream_title.split(' - ', 1)
+            artist = parts[0].strip()
+            title = parts[1].strip()
+        else:
+            artist = "Unknown Artist"
+            title = stream_title.strip()
+        
+        # Update current track info
+        track_info = {
+            'title': title,
+            'artist': artist,
+            'raw_title': stream_title
+        }
+        
+        # Only emit if track actually changed
+        if track_info != self.current_track:
+            self.current_track = track_info
+            self.metadata_updated.emit(track_info)
+            logger.info(f"ICY metadata: {artist} - {title}")
+            
+            # Try to fetch album art
+            self.fetch_album_art(artist, title)
+    
+    def fetch_album_art(self, artist, title):
+        """Fetch album art using multiple sources"""
+        try:
+            logger.info(f"=== Starting album art search for: {artist} - {title} ===")
+            
+            # Try multiple sources in order of preference
+            artwork_url = None
+            
+            # 1. Try MusicBrainz + Cover Art Archive
+            logger.info("Trying source 1: MusicBrainz + Cover Art Archive")
+            artwork_url = self.search_musicbrainz_art(artist, title)
+            
+            # 2. Try Last.fm as fallback
+            if not artwork_url:
+                logger.info("Trying source 2: Last.fm API")
+                artwork_url = self.search_lastfm_art(artist, title)
+            else:
+                logger.info("Skipping Last.fm - already found artwork from MusicBrainz")
+            
+            # 3. Try iTunes Search API as another fallback
+            if not artwork_url:
+                logger.info("Trying source 3: iTunes Search API")
+                artwork_url = self.search_itunes_art(artist, title)
+            else:
+                logger.info("Skipping iTunes - already found artwork")
+            
+            if artwork_url:
+                logger.info(f"SUCCESS: Found album art URL: {artwork_url}")
+                self.download_artwork(artwork_url)
+            else:
+                logger.info(f"FAILURE: No album art found for: {artist} - {title}")
+                logger.info("All sources exhausted, using default artwork")
+                # Emit a default music icon instead of no artwork
+                self.emit_default_radio_artwork()
+            
+            logger.info(f"=== Album art search complete for: {artist} - {title} ===")
+                
+        except Exception as e:
+            logger.error(f"Album art fetch error: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    def search_musicbrainz_art(self, artist, title):
+        """Search for album artwork using MusicBrainz + Cover Art Archive"""
+        try:
+            logger.info(f"Searching MusicBrainz for: {artist} - {title}")
+            
+            # Clean up artist and title for better search
+            clean_artist = artist.replace('"', '').strip()
+            clean_title = title.replace('"', '').strip()
+            
+            # Try different search strategies
+            search_queries = [
+                f'artist:"{clean_artist}" AND recording:"{clean_title}"',
+                f'artist:{clean_artist} AND recording:{clean_title}',
+                f'{clean_artist} {clean_title}'
+            ]
+            
+            for i, query in enumerate(search_queries):
+                try:
+                    logger.info(f"MusicBrainz query {i+1}/3: {query}")
+                    mb_url = "https://musicbrainz.org/ws/2/recording/"
+                    params = {
+                        'query': query,
+                        'fmt': 'json',
+                        'limit': 5
+                    }
+                    
+                    headers = {
+                        'User-Agent': 'Pyper/1.0 (Music Player; kevin@example.com)'
+                    }
+                    
+                    response = requests.get(mb_url, params=params, headers=headers, timeout=10)
+                    logger.info(f"MusicBrainz response status: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        recordings = data.get('recordings', [])
+                        logger.info(f"Found {len(recordings)} recordings")
+                        
+                        if len(recordings) == 0:
+                            logger.info("No recordings found for query")
+                            continue
+                        
+                        for j, recording in enumerate(recordings):
+                            logger.info(f"Checking recording {j+1}: {recording.get('title', 'Unknown')}")
+                            releases = recording.get('releases', [])
+                            logger.info(f"Recording has {len(releases)} releases")
+                            
+                            for k, release in enumerate(releases):
+                                release_id = release.get('id')
+                                release_title = release.get('title', 'Unknown')
+                                logger.info(f"Checking release {k+1}: {release_title} (ID: {release_id})")
+                                
+                                if release_id:
+                                    cover_url = f"https://coverartarchive.org/release/{release_id}/front-250"
+                                    logger.info(f"Checking cover art: {cover_url}")
+                                    
+                                    try:
+                                        cover_response = requests.head(cover_url, timeout=5, allow_redirects=True)
+                                        logger.info(f"Cover art response: {cover_response.status_code}")
+                                        if cover_response.status_code == 200:
+                                            logger.info(f"Found MusicBrainz cover art: {cover_url}")
+                                            return cover_url
+                                        elif cover_response.status_code == 307:
+                                            # Follow redirect manually
+                                            redirect_url = cover_response.headers.get('Location')
+                                            if redirect_url:
+                                                logger.info(f"Following redirect to: {redirect_url}")
+                                                redirect_response = requests.head(redirect_url, timeout=5)
+                                                if redirect_response.status_code == 200:
+                                                    logger.info(f"Found MusicBrainz cover art via redirect: {redirect_url}")
+                                                    return redirect_url
+                                        else:
+                                            logger.info(f"Cover art not available (HTTP {cover_response.status_code})")
+                                    except Exception as e:
+                                        logger.info(f"Cover art check failed: {e}")
+                                        continue
+                    else:
+                        logger.info(f"MusicBrainz API error: HTTP {response.status_code}")
+                        if response.status_code == 503:
+                            logger.info("MusicBrainz rate limited, waiting longer...")
+                            self.msleep(2000)
+                    
+                    # Rate limiting respect
+                    self.msleep(1000)
+                    
+                except Exception as e:
+                    logger.info(f"MusicBrainz query failed: {e}")
+                    continue
+            
+            logger.info("No MusicBrainz artwork found after all queries")
+            return None
+            
+        except Exception as e:
+            logger.info(f"MusicBrainz search error: {e}")
+            return None
+    
+    def search_lastfm_art(self, artist, title):
+        """Search for album artwork using Last.fm API (free, no key needed for some endpoints)"""
+        try:
+            logger.info(f"Searching Last.fm for: {artist} - {title}")
+            
+            # Last.fm track.getInfo API (requires API key, so we'll skip this for now)
+            # Instead, try a different approach or skip Last.fm
+            logger.info("Last.fm requires API key - skipping for now")
+            return None
+            
+            # Old code kept for reference:
+            lastfm_url = "http://ws.audioscrobbler.com/2.0/"
+            params = {
+                'method': 'track.getinfo',
+                'artist': artist,
+                'track': title,
+                'format': 'json'
+            }
+            
+            headers = {
+                'User-Agent': 'Pyper/1.0 (Music Player)'
+            }
+            
+            response = requests.get(lastfm_url, params=params, headers=headers, timeout=10)
+            logger.info(f"Last.fm response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(f"Last.fm response data keys: {list(data.keys())}")
+                
+                if 'error' in data:
+                    logger.info(f"Last.fm API error: {data.get('message', 'Unknown error')}")
+                    return None
+                
+                track = data.get('track', {})
+                logger.info(f"Track data keys: {list(track.keys())}")
+                
+                album = track.get('album', {})
+                logger.info(f"Album data: {album}")
+                
+                images = album.get('image', [])
+                logger.info(f"Found {len(images)} images")
+                
+                # Look for large or extralarge images
+                for i, img in enumerate(images):
+                    size = img.get('size', 'unknown')
+                    img_url = img.get('#text', '').strip()
+                    logger.info(f"Image {i+1}: size={size}, url={img_url[:50]}...")
+                    
+                    if img.get('size') in ['large', 'extralarge', 'mega']:
+                        if img_url and img_url != '':
+                            logger.info(f"Found Last.fm album art: {img_url}")
+                            return img_url
+                
+                logger.info("No suitable Last.fm images found")
+            else:
+                logger.info(f"Last.fm API error: HTTP {response.status_code}")
+            
+            return None
+            
+        except Exception as e:
+            logger.info(f"Last.fm search error: {e}")
+            return None
+    
+    def search_itunes_art(self, artist, title):
+        """Search for album artwork using iTunes Search API"""
+        try:
+            logger.info(f"Searching iTunes for: {artist} - {title}")
+            
+            # Clean up title - remove parenthetical year info for better matching
+            clean_title = title
+            if '(' in title and ')' in title:
+                clean_title = title.split('(')[0].strip()
+                logger.info(f"Cleaned title: '{title}' -> '{clean_title}'")
+            
+            search_term = f"{artist} {clean_title}".replace(' ', '+')
+            itunes_url = f"https://itunes.apple.com/search"
+            params = {
+                'term': search_term,
+                'media': 'music',
+                'entity': 'song',
+                'limit': 10  # Increase limit for better chances
+            }
+            
+            headers = {
+                'User-Agent': 'Pyper/1.0 (Music Player)'
+            }
+            
+            logger.info(f"iTunes search term: {search_term}")
+            response = requests.get(itunes_url, params=params, headers=headers, timeout=10)
+            logger.info(f"iTunes response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get('results', [])
+                logger.info(f"iTunes found {len(results)} results")
+                
+                for i, result in enumerate(results):
+                    track_name = result.get('trackName', 'Unknown')
+                    artist_name = result.get('artistName', 'Unknown')
+                    logger.info(f"iTunes result {i+1}: {artist_name} - {track_name}")
+                    
+                    # Look for artwork URL
+                    artwork_url = result.get('artworkUrl100', '')
+                    if artwork_url:
+                        # Convert to higher resolution
+                        artwork_url = artwork_url.replace('100x100', '600x600')
+                        logger.info(f"Found iTunes album art: {artwork_url}")
+                        return artwork_url
+                    else:
+                        logger.info(f"No artwork URL for result {i+1}")
+                
+                logger.info("No iTunes artwork found in any results")
+            else:
+                logger.info(f"iTunes API error: HTTP {response.status_code}")
+            
+            return None
+            
+        except Exception as e:
+            logger.info(f"iTunes search error: {e}")
+            return None
+    
+    def download_artwork(self, artwork_url):
+        """Download and emit artwork"""
+        try:
+            logger.info(f"Downloading artwork from: {artwork_url}")
+            
+            headers = {
+                'User-Agent': 'Pyper/1.0 (Music Player)'
+            }
+            
+            response = requests.get(artwork_url, timeout=15, headers=headers)
+            logger.info(f"Artwork download response: {response.status_code}")
+            
+            if response.status_code == 200:
+                content = response.content
+                content_type = response.headers.get('content-type', 'unknown')
+                logger.info(f"Downloaded {len(content)} bytes, content-type: {content_type}")
+                
+                # Check if it's actually an image
+                if not content_type.startswith('image/'):
+                    logger.warning(f"Content type is not an image: {content_type}")
+                    # Try to load anyway, sometimes servers don't set proper content-type
+                
+                pixmap = QPixmap()
+                success = pixmap.loadFromData(content)
+                
+                if success and not pixmap.isNull():
+                    logger.info(f"Successfully loaded artwork: {pixmap.width()}x{pixmap.height()}")
+                    scaled_pixmap = pixmap.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    self.artwork_ready.emit(scaled_pixmap)
+                    logger.info("Emitted artwork successfully")
+                else:
+                    logger.warning("Failed to load pixmap from downloaded data")
+                    logger.info(f"Content preview (first 100 bytes): {content[:100]}")
+            else:
+                logger.warning(f"Failed to download artwork: HTTP {response.status_code}")
+                if response.status_code == 404:
+                    logger.info("Artwork URL returned 404 - not found")
+                elif response.status_code == 403:
+                    logger.info("Artwork URL returned 403 - forbidden")
+                    
+        except Exception as e:
+            logger.error(f"Artwork download error: {e}")
+            import traceback
+            logger.error(f"Download traceback: {traceback.format_exc()}")
+    
+    def emit_default_radio_artwork(self):
+        """Create and emit a default radio artwork when no album art is found"""
+        try:
+            logger.info("Creating default radio artwork...")
+            
+            # Create a simple default radio artwork
+            pixmap = QPixmap(200, 200)
+            pixmap.fill(Qt.GlobalColor.darkGray)
+            
+            # Draw a musical note or radio icon
+            painter = QPainter(pixmap)
+            painter.setPen(Qt.GlobalColor.white)
+            painter.setFont(QFont("Arial", 48))
+            
+            # Use a simple text character instead of emoji which might not render
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "♪")
+            painter.end()
+            
+            logger.info(f"Created default artwork: {pixmap.width()}x{pixmap.height()}")
+            self.artwork_ready.emit(pixmap)
+            logger.info("Emitted default radio artwork")
+            
+        except Exception as e:
+            logger.error(f"Error creating default artwork: {e}")
+            import traceback
+            logger.error(f"Default artwork traceback: {traceback.format_exc()}")
 
 class ContextualInfoPanel(QWidget):
     """Bottom panel showing contextual information about selected items"""
@@ -1161,6 +1613,12 @@ class PyperMainWindow(QMainWindow):
         self.current_playing_index = -1
         self.current_artwork_pixmap = None
         self.search_results = {}  # Store search results
+        self.radio_stations = []  # Store radio stations
+        
+        # Radio metadata
+        self.icy_parser = None
+        self.current_radio_track = {}
+        self.is_playing_radio = False
         
         # Initialize database helper for play counts
         db_path = CONFIG.get('navidrome', {}).get('database_path')
@@ -1204,6 +1662,11 @@ class PyperMainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Handle application close event"""
+        # Stop radio metadata parsing
+        if hasattr(self, 'icy_parser') and self.icy_parser:
+            self.icy_parser.stop()
+            self.icy_parser.wait()
+            
         # Clean up temporary database files
         if hasattr(self, 'db_helper'):
             self.db_helper.cleanup()
@@ -1548,12 +2011,27 @@ class PyperMainWindow(QMainWindow):
         self.recently_played_list.customContextMenuRequested.connect(self.show_recently_played_context_menu)
         recently_played_layout.addWidget(self.recently_played_list)
         
+        # Radio tab
+        radio_tab = QWidget()
+        radio_layout = QVBoxLayout(radio_tab)
+        
+        radio_header = QLabel("Internet Radio Stations")
+        radio_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        radio_layout.addWidget(radio_header)
+        
+        self.radio_list = QListWidget()
+        self.radio_list.itemDoubleClicked.connect(self.radio_double_clicked)
+        self.radio_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.radio_list.customContextMenuRequested.connect(self.show_radio_context_menu)
+        radio_layout.addWidget(self.radio_list)
+        
         # Add tabs
         self.tab_widget.addTab(browse_tab, "Browse")
         self.tab_widget.addTab(search_tab, "Search")
         self.tab_widget.addTab(queue_tab, "Queue")
         self.tab_widget.addTab(most_played_tab, "Most Played")
         self.tab_widget.addTab(recently_played_tab, "Recently Played")
+        self.tab_widget.addTab(radio_tab, "Radio")
         
         browser_layout.addWidget(self.tab_widget)
         content_splitter.addWidget(browser_widget)
@@ -1719,6 +2197,9 @@ class PyperMainWindow(QMainWindow):
         
         # Load play count data and populate new tabs
         self.load_play_count_data()
+        
+        # Load radio stations
+        self.load_radio_stations()
     
     def refresh_error(self, error_message):
         """Handle library refresh error"""
@@ -2521,6 +3002,10 @@ class PyperMainWindow(QMainWindow):
             song = self.current_queue[index]
             self.current_playing_index = index
             
+            # Stop radio metadata if playing radio
+            if self.is_playing_radio:
+                self.stop_radio_metadata()
+            
             try:
                 # Get stream URL with token authentication
                 salt = self.sonic_client._generate_salt()
@@ -2564,6 +3049,10 @@ class PyperMainWindow(QMainWindow):
     
     def stop(self):
         """Stop playback"""
+        # Stop radio metadata if playing radio
+        if self.is_playing_radio:
+            self.stop_radio_metadata()
+            
         self.media_player.stop()
         self.play_pause_button.setText("Play")
         self.now_playing_label.setText("Stopped")
@@ -2626,6 +3115,269 @@ class PyperMainWindow(QMainWindow):
             self.sonic_client.scrobble(song_id)
         except Exception as e:
             logger.error(f"Scrobbling error: {e}")
+    
+    def load_radio_stations(self):
+        """Load radio stations from library data"""
+        self.radio_stations = self.library_data.get('radio_stations', [])
+        self.populate_radio_list()
+    
+    def populate_radio_list(self):
+        """Populate the radio stations list"""
+        self.radio_list.clear()
+        for station in self.radio_stations:
+            station_name = station.get('name', 'Unknown Station')
+            list_item = QListWidgetItem(station_name)
+            list_item.setData(Qt.ItemDataRole.UserRole, station)
+            self.radio_list.addItem(list_item)
+        
+        if self.radio_stations:
+            logger.info(f"Loaded {len(self.radio_stations)} radio stations")
+        else:
+            logger.info("No radio stations found")
+    
+    def radio_double_clicked(self, item):
+        """Handle double-click on radio station - start playing directly"""
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and 'streamUrl' in data:
+            self.play_radio_station(data)
+    
+    def show_radio_context_menu(self, position):
+        """Show context menu for radio stations"""
+        item = self.radio_list.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        
+        play_action = menu.addAction("Play Radio Station")
+        play_action.triggered.connect(lambda: self.radio_double_clicked(item))
+        
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data and data.get('homepageUrl'):
+            menu.addSeparator()
+            homepage_action = menu.addAction("Open Homepage")
+            homepage_action.triggered.connect(lambda: self.open_radio_homepage(data))
+        
+        menu.exec(self.radio_list.mapToGlobal(position))
+    
+    def play_radio_station(self, station_data):
+        """Play a radio station directly"""
+        try:
+            stream_url = station_data.get('streamUrl')
+            station_name = station_data.get('name', 'Unknown Station')
+            
+            if not stream_url:
+                QMessageBox.warning(self, "Radio Error", "No stream URL available for this station")
+                return
+            
+            # Stop any existing ICY parser
+            if self.icy_parser:
+                self.icy_parser.stop()
+                self.icy_parser.wait()
+                self.icy_parser = None
+            
+            # Update state
+            self.is_playing_radio = True
+            self.current_radio_track = {'station': station_name}
+            
+            # Update UI
+            self.now_playing_label.setText(f"📻 {station_name}")
+            
+            # Start radio playback - radio streams directly, no queue needed
+            self.media_player.setSource(QUrl(stream_url))
+            self.media_player.play()
+            self.play_pause_button.setText("Pause")
+            
+            # Set initial radio artwork
+            logger.info("Setting initial radio artwork...")
+            self.artwork_label.clear()
+            self.artwork_label.setText("📻")
+            self.current_artwork_pixmap = None
+            
+            # Force a simple test artwork to see if the label works
+            test_pixmap = QPixmap(80, 80)
+            test_pixmap.fill(Qt.GlobalColor.red)
+            self.artwork_label.setPixmap(test_pixmap)
+            logger.info("Set test red artwork")
+            
+            # Then clear it back to radio icon
+            QTimer.singleShot(2000, lambda: self.artwork_label.setText("📻"))
+            
+            logger.info("Initial radio artwork set")
+            
+            # Start ICY metadata parsing
+            self.start_icy_metadata_parsing(stream_url, station_data)
+            
+            # Show in contextual panel if available
+            if self.contextual_panel:
+                self.show_radio_info_in_panel(station_data)
+            
+            self.status_label.setText(f"Playing radio: {station_name}")
+            logger.info(f"Started playing radio station: {station_name}")
+            
+        except Exception as e:
+            logger.error(f"Error playing radio station: {e}")
+            QMessageBox.warning(self, "Radio Error", f"Failed to play radio station: {str(e)}")
+    
+    def show_radio_info_in_panel(self, station_data):
+        """Show radio station info in contextual panel"""
+        if not self.contextual_panel:
+            return
+            
+        self.contextual_panel.clear_content()
+        
+        # Create radio info section
+        radio_section = QWidget()
+        radio_layout = QVBoxLayout(radio_section)
+        radio_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Station name
+        station_name = QLabel(f"<b>📻 {station_data.get('name', 'Unknown Station')}</b>")
+        station_name.setStyleSheet("font-size: 14px; color: white;")
+        radio_layout.addWidget(station_name)
+        
+        # Stream URL (abbreviated)
+        stream_url = station_data.get('streamUrl', '')
+        if len(stream_url) > 50:
+            stream_url = stream_url[:47] + "..."
+        url_label = QLabel(f"Stream: {stream_url}")
+        url_label.setStyleSheet("color: #ccc; font-size: 12px;")
+        radio_layout.addWidget(url_label)
+        
+        # Homepage URL if available
+        if station_data.get('homepageUrl'):
+            homepage_url = station_data.get('homepageUrl')
+            if len(homepage_url) > 50:
+                homepage_url = homepage_url[:47] + "..."
+            homepage_label = QLabel(f"Homepage: {homepage_url}")
+            homepage_label.setStyleSheet("color: #aaa; font-size: 12px;")
+            radio_layout.addWidget(homepage_label)
+        
+        radio_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
+        radio_section.setFixedWidth(300)
+        self.contextual_panel.content_layout.addWidget(radio_section)
+        self.contextual_panel.content_layout.addStretch()
+    
+    def open_radio_homepage(self, station_data):
+        """Open radio station homepage in browser"""
+        homepage_url = station_data.get('homepageUrl')
+        if homepage_url:
+            try:
+                import webbrowser
+                webbrowser.open(homepage_url)
+            except Exception as e:
+                logger.error(f"Error opening homepage: {e}")
+                QMessageBox.warning(self, "Browser Error", f"Failed to open homepage: {str(e)}")
+    
+    def start_icy_metadata_parsing(self, stream_url, station_data):
+        """Start ICY metadata parsing for radio station"""
+        try:
+            self.icy_parser = ICYMetadataParser(stream_url)
+            self.icy_parser.metadata_updated.connect(self.on_radio_metadata_updated)
+            self.icy_parser.artwork_ready.connect(self.on_radio_artwork_ready)
+            self.icy_parser.start()
+            logger.info(f"Started ICY metadata parsing for {station_data.get('name')}")
+        except Exception as e:
+            logger.error(f"Failed to start ICY metadata parsing: {e}")
+    
+    def on_radio_metadata_updated(self, track_info):
+        """Handle updated radio metadata"""
+        if not self.is_playing_radio:
+            return
+            
+        self.current_radio_track.update(track_info)
+        
+        # Update UI with track info
+        station_name = self.current_radio_track.get('station', 'Radio')
+        artist = track_info.get('artist', 'Unknown Artist')
+        title = track_info.get('title', 'Unknown Title')
+        
+        # Update now playing label
+        if artist != 'Unknown Artist':
+            self.now_playing_label.setText(f"📻 {station_name}: {artist} - {title}")
+        else:
+            self.now_playing_label.setText(f"📻 {station_name}: {title}")
+        
+        # Update contextual panel with track info
+        if self.contextual_panel:
+            self.update_radio_contextual_panel()
+        
+        # Update status
+        self.status_label.setText(f"Radio: {artist} - {title}")
+        
+        logger.info(f"Radio track updated: {artist} - {title}")
+    
+    def on_radio_artwork_ready(self, pixmap):
+        """Handle radio artwork ready"""
+        logger.info(f"Received radio artwork: {pixmap.width()}x{pixmap.height()}")
+        
+        if not self.is_playing_radio:
+            logger.info("Not playing radio - ignoring artwork")
+            return
+            
+        # Update artwork in player
+        logger.info("Updating artwork label...")
+        self.artwork_label.setPixmap(pixmap)
+        self.artwork_label.setText("")
+        self.current_artwork_pixmap = pixmap
+        
+        # Force update
+        self.artwork_label.update()
+        self.artwork_label.repaint()
+        
+        logger.info("Radio artwork updated successfully")
+    
+    def update_radio_contextual_panel(self):
+        """Update contextual panel with current radio track info"""
+        if not self.contextual_panel or not self.is_playing_radio:
+            return
+            
+        self.contextual_panel.clear_content()
+        
+        # Create radio track info section
+        radio_section = QWidget()
+        radio_layout = QVBoxLayout(radio_section)
+        radio_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Station name
+        station_name = self.current_radio_track.get('station', 'Unknown Station')
+        station_label = QLabel(f"<b>📻 {station_name}</b>")
+        station_label.setStyleSheet("font-size: 14px; color: white;")
+        radio_layout.addWidget(station_label)
+        
+        # Current track info
+        artist = self.current_radio_track.get('artist', 'Unknown Artist')
+        title = self.current_radio_track.get('title', 'Unknown Title')
+        
+        if artist != 'Unknown Artist':
+            artist_label = QLabel(f"Artist: {artist}")
+            artist_label.setStyleSheet("color: #ccc; font-size: 12px;")
+            radio_layout.addWidget(artist_label)
+        
+        title_label = QLabel(f"Track: {title}")
+        title_label.setStyleSheet("color: #ccc; font-size: 12px;")
+        radio_layout.addWidget(title_label)
+        
+        # Raw metadata for debugging
+        raw_title = self.current_radio_track.get('raw_title', '')
+        if raw_title and raw_title != title:
+            raw_label = QLabel(f"Stream Title: {raw_title}")
+            raw_label.setStyleSheet("color: #888; font-size: 10px; font-style: italic;")
+            radio_layout.addWidget(raw_label)
+        
+        radio_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
+        radio_section.setFixedWidth(350)
+        self.contextual_panel.content_layout.addWidget(radio_section)
+        self.contextual_panel.content_layout.addStretch()
+    
+    def stop_radio_metadata(self):
+        """Stop radio metadata parsing"""
+        if self.icy_parser:
+            self.icy_parser.stop()
+            self.icy_parser.wait()
+            self.icy_parser = None
+        self.is_playing_radio = False
+        self.current_radio_track = {}
     
     @staticmethod
     def format_duration(seconds):

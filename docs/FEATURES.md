@@ -21,7 +21,7 @@ This document provides a comprehensive overview of all features available in Pyp
 ## 🗂️ Navigation & Browsing
 
 ### Multi-Category Navigation
-Pyper provides five distinct browsing categories:
+Pyper provides five distinct browsing categories plus dedicated tabs for enhanced functionality:
 
 #### 1. Artists
 - **Hierarchical Browsing**: Artists → Albums → Songs
@@ -51,6 +51,13 @@ Pyper provides five distinct browsing categories:
 - **Album Counts**: Number of albums per decade displayed
 - **Year Range Filtering**: Automatic decade-based album filtering
 - **Chronological Organization**: Decades sorted from newest to oldest
+
+### Additional Tabs
+- **Search Tab**: Global search across all content types
+- **Queue Tab**: Playback queue management with track removal and clear options
+- **Most Played Tab**: Albums ranked by play frequency from database
+- **Recently Played Tab**: Albums ordered by last played date
+- **Radio Tab**: Internet radio stations with live metadata and album artwork
 
 ### Search Functionality
 - **Global Search**: Search across artists, albums, and songs simultaneously
@@ -86,6 +93,13 @@ The dynamic bottom panel provides relevant information based on your current sel
 - **Era Albums**: Album thumbnails from the selected decade
 - **Historical Browsing**: Visual timeline of your music collection
 - **Period Statistics**: Album count for the decade
+
+### Radio Context
+- **Station Information**: Current radio station name and details
+- **Live Track Display**: Real-time artist and title from ICY metadata
+- **Stream Details**: Stream URL and homepage information
+- **Raw Metadata**: Original stream title for debugging purposes
+- **Dynamic Updates**: Content updates automatically as tracks change
 
 ### Default State
 - **Helpful Message**: Guidance text when no item is selected
@@ -131,6 +145,70 @@ Available throughout the interface:
 - **"Add to Queue"**: Adds content without playing
 - **"Play Now"**: Adds to queue and starts playback
 - **"Remove from Queue"**: Removes specific queue items
+
+## 📻 Internet Radio System
+
+### Radio Station Management
+- **Navidrome Integration**: Automatically loads radio stations configured in Navidrome
+- **Station Discovery**: Stations appear in dedicated Radio tab after library refresh
+- **Station Information**: View stream URLs, homepage links, and station details
+- **Direct Streaming**: Double-click any station to start immediate playback
+
+### Advanced ICY Metadata Parsing
+- **Real-Time Track Information**: Continuous parsing of ICY metadata from radio streams
+- **Multiple Format Support**: Handles various stream title formats:
+  - "Artist - Title" (standard format)
+  - "Title only" (when artist unknown)
+  - "Artist - Title (Year)" (with additional info)
+- **Live Updates**: Metadata refreshed every 10 seconds automatically
+- **Intelligent Parsing**: Smart separation of artist and track information
+- **Raw Metadata Preservation**: Original stream data kept for debugging
+
+### Multi-Source Album Artwork System
+- **Primary Source - MusicBrainz + Cover Art Archive**:
+  - Comprehensive music database with extensive artwork collection
+  - Multiple query strategies for better matching accuracy
+  - Smart redirect handling (HTTP 307) for Cover Art Archive
+  - Release-based artwork matching for higher quality results
+- **Secondary Source - iTunes Search API**:
+  - Mainstream music coverage with high-quality artwork
+  - Automatic search term optimization (removes parenthetical info)
+  - High-resolution artwork conversion (600x600px)
+  - Fallback for tracks not found in MusicBrainz
+- **Intelligent Search Processing**:
+  - Multiple query formats tried per source for best results
+  - Automatic title cleanup for better API matching
+  - Smart timeout and retry handling for reliable operation
+  - Comprehensive error handling with detailed logging
+- **Default Artwork Generation**:
+  - Custom radio artwork created when no album art found
+  - Musical note symbol (♪) on gray background
+  - Consistent 200x200px sizing for uniform display
+  - Immediate fallback to maintain visual consistency
+
+### Radio Interface Features
+- **Visual Radio Indicators**: 📻 emoji clearly distinguishes radio from music playback
+- **Contextual Radio Panel**: Dynamic bottom panel updates with:
+  - Current station name and stream information
+  - Real-time track artist and title
+  - Stream URL and homepage links (when available)
+  - Raw metadata display for technical users
+- **Homepage Integration**: Right-click radio stations to open their websites directly
+- **Seamless Mode Switching**: Smooth transitions between radio and music library playback
+- **Consistent UI Behavior**: Radio playback integrates fully with existing theme system
+
+### Radio Streaming Technology
+- **Direct Stream Playback**: Bypasses queue system for continuous radio streaming
+- **ICY Metadata Protocol**: Full support for Icecast metadata parsing
+- **Stream Reliability**: Robust connection handling with automatic reconnection
+- **Background Processing**: Metadata parsing runs in separate thread for UI responsiveness
+- **Memory Management**: Efficient cleanup of metadata parsing resources
+
+### Radio Configuration
+- **Navidrome Setup**: Configure stations through Navidrome web interface
+- **Settings Location**: Access via Settings → Internet Radio in Navidrome
+- **Automatic Discovery**: Stations automatically appear in Pyper after refresh
+- **No Additional Setup**: Zero configuration required in Pyper itself
 
 ## 🔍 Search System
 

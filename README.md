@@ -6,7 +6,8 @@ A feature-rich, Linux-first music player application designed specifically for N
 
 - **🐧 Linux-First Design**: Optimized for Linux desktop environments
 - **🔍 Powerful Search**: Search across artists, albums, and songs with dedicated search tab
-- **🎯 Enhanced Tabbed Interface**: Browse, Search, Queue, Most Played, and Recently Played tabs
+- **🎯 Enhanced Tabbed Interface**: Browse, Search, Queue, Most Played, Recently Played, and Radio tabs
+- **📻 Advanced Internet Radio**: Stream radio stations with real-time ICY metadata, multi-source album art, and intelligent track parsing
 - **🎨 Contextual Information Panel**: Dynamic bottom panel showing artist info, album details, and artwork based on your selection
 - **🎵 Multi-Category Navigation**: Browse by Artists, Albums, Playlists, Genres, and Years (decades)
 - **📊 Play Count Integration**: Display play counts from Navidrome database with remote SSH access support
@@ -141,6 +142,11 @@ Edit `config/config.json`:
 - `/opt/navidrome/navidrome.db` (manual installation)  
 - `/home/navidrome/navidrome.db` (user installation)
 
+**Radio Station Configuration:**
+- Configure internet radio stations through your Navidrome web interface
+- Go to Settings → Internet Radio in Navidrome to add stations
+- Stations will automatically appear in Pyper's Radio tab after refresh
+
 ## 🎵 Usage
 
 ### Navigation Structure
@@ -154,6 +160,7 @@ Edit `config/config.json`:
 - **Queue Tab**: Manage your playback queue
 - **Most Played Tab**: Discover your most frequently played albums with play counts
 - **Recently Played Tab**: Quick access to recently played albums
+- **Radio Tab**: Stream internet radio stations configured on your Navidrome server
 
 ### Contextual Information Panel
 The bottom panel dynamically displays relevant information based on your selection:
@@ -180,6 +187,36 @@ The bottom panel dynamically displays relevant information based on your selecti
 - **Queue Tab**: Full queue view with clear button
 - **Right-click** queue items for "Remove from Queue" or "Play Now"
 - **Clear Queue** button in Queue tab to empty entire queue
+
+### Radio Streaming
+- **Radio Tab**: Access internet radio stations configured on your Navidrome server
+- **Direct Streaming**: Double-click any radio station to start streaming immediately
+- **Advanced ICY Metadata Parsing**: 
+  - Real-time track information extraction from radio streams
+  - Supports various metadata formats ("Artist - Title", "Title only", etc.)
+  - Automatic parsing of stream titles with intelligent artist/track separation
+  - Live updates every 10 seconds for current playing track information
+- **Multi-Source Album Artwork**: 
+  - **MusicBrainz + Cover Art Archive**: Primary source with comprehensive music database
+  - **iTunes Search API**: Secondary fallback for mainstream music
+  - **Smart Redirect Handling**: Follows HTTP 307 redirects for Cover Art Archive
+  - **Intelligent Search**: Multiple query strategies for better artwork matching
+  - **Fallback Graphics**: Default radio artwork when no album art is found
+- **Enhanced Radio Interface**:
+  - **Station Information**: View stream URL, homepage, and station details
+  - **Homepage Integration**: Right-click to open station websites directly
+  - **Live Track Display**: Real-time updates in player and contextual panel
+  - **Visual Feedback**: Radio icon (📻) indicates radio mode vs music library
+- **Contextual Radio Panel**: 
+  - Dynamic updates showing current station and track information
+  - Artist, title, and raw stream metadata display
+  - Station details including homepage and stream URL
+  - Seamless switching between radio and music library contexts
+- **Smart Metadata Processing**:
+  - Handles various radio stream title formats automatically
+  - Cleans up track information for better API searches
+  - Preserves original stream metadata for debugging
+  - Robust error handling for unreliable stream metadata
 
 ### Album Artwork
 - **Click artwork** in player to show detailed track info dialog
@@ -294,6 +331,28 @@ pip install py-sonic qt-material
 - **[Installation Guide](install-shortcut.sh)**: Desktop integration setup
 
 ## 🎯 Recent Updates
+
+### v2.2 - Advanced Radio with Multi-Source Album Art & ICY Metadata
+- Added **📻 Internet Radio Tab** with full streaming capabilities and advanced metadata support
+- Implemented **comprehensive ICY (Icecast) metadata parsing** for real-time track information:
+  - Automatic parsing of various stream title formats ("Artist - Title", "Title only", etc.)
+  - Live updates every 10 seconds with intelligent artist/track separation
+  - Raw metadata preservation for debugging and comprehensive track info
+- **Multi-source album artwork system** with robust fallback mechanisms:
+  - **MusicBrainz + Cover Art Archive** as primary source with redirect handling
+  - **iTunes Search API** as secondary fallback for mainstream music
+  - **Smart query strategies** with multiple search approaches per source
+  - **Automatic title cleanup** removing parenthetical info for better API matching
+  - **Default radio artwork** generation when no album art is found
+- **Enhanced radio interface and user experience**:
+  - **Dynamic contextual panel** with real-time station and track information
+  - **Visual radio indicators** (📻) distinguishing radio from music library playback
+  - **Homepage integration** allowing direct access to radio station websites
+  - **Comprehensive error handling** with detailed logging for troubleshooting
+- **Seamless integration** with existing music library features:
+  - Smooth switching between radio and music library playback
+  - Consistent UI behavior across radio and music modes
+  - Full integration with theming system and contextual information display
 
 ### v2.1 - Comprehensive Theming & UI Polish
 - Added **comprehensive theming system** with 8 custom themes
