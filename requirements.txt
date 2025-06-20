@@ -1,0 +1,4 @@
+PyQt6>=6.4.0
+PyQt6-Qt6>=6.4.0
+py-sonic>=1.0.0
+qt-material>=2.14 
