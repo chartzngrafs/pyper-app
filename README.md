@@ -6,7 +6,7 @@ A feature-rich, Linux-first music player application designed specifically for N
 
 - **🐧 Linux-First Design**: Optimized for Linux desktop environments
 - **🔍 Powerful Search**: Search across artists, albums, and songs with dedicated search tab
-- **🎯 Enhanced Tabbed Interface**: Browse, Search, Queue, Most Played, Recently Played, and Radio tabs
+- **🎯 Enhanced Tabbed Interface**: Browse, Search, Queue, Most Played, Recently Played, Recently Added, and Radio tabs
 - **📻 Advanced Internet Radio**: Stream radio stations with real-time ICY metadata, multi-source album art, and intelligent track parsing
 - **🎨 Contextual Information Panel**: Dynamic bottom panel showing artist info, album details, and artwork based on your selection
 - **🎵 Multi-Category Navigation**: Browse by Artists, Albums, Playlists, Genres, and Years (decades)
@@ -15,12 +15,16 @@ A feature-rich, Linux-first music player application designed specifically for N
 - **📋 Queue Management**: Full playback queue with individual track management and Clear Queue functionality
 - **🎵 Scrobbling**: Last.fm compatible scrobbling through Navidrome
 - **🌈 Comprehensive Theming System**: 8 custom themes plus qt-material themes with automatic text contrast
-- **🖱️ Context Menus**: Right-click options throughout the interface
+- **🖱️ Context Menus**: Right-click options throughout the interface with "Go to..." navigation
 - **⚡ Smart Playback**: Double-click anywhere to add and play immediately
 - **🚀 Auto-Expand**: Artists automatically expanded on startup for immediate browsing
 - **📝 Comprehensive Logging**: File and console logging for debugging and monitoring
 - **🔗 Remote Database Access**: SSH-based access to remote Navidrome databases for play count data
 - **🎯 Improved Album Layout**: Side-by-side artwork and info display with equal heights for better visual balance
+- **⏯️ Time Scrubbing**: Click progress bar to seek to any position in tracks
+- **🆕 Recently Added Albums**: Dedicated tab showing newest albums with creation dates
+- **🧭 Smart Navigation**: "Go to..." context menu options to jump between tabs and find items in Browse section
+- **🎨 Synthwave Icon**: Beautiful neon electric blue soundwave icon matching the synthwave aesthetic
 
 ## 🎨 Theming System
 
@@ -34,7 +38,7 @@ Pyper includes a comprehensive theming system with **8 custom themes** plus qt-m
 5. **Dracula** - Dark theme with purple accents inspired by the popular Dracula color scheme
 6. **Tokyo Midnight** - Dark blue theme with neon accents inspired by Tokyo's nightlife
 7. **Monochrome** - Clean black, white, and gray professional theme
-8. **Synthwave '84** - Authentic 80s synthwave theme with neon pink, green, and yellow
+8. **Synthwave '84** - Authentic 80s synthwave theme with neon electric blue highlights and hot pink accents
 
 ### Theme Features
 - **Automatic Text Contrast**: Intelligent contrast calculation ensures readable text on all backgrounds
@@ -157,9 +161,10 @@ Edit `config/config.json`:
   - **Genres**: Browse music by genre with album previews
   - **Years**: Browse by decades (1960s, 1970s, etc.) with album counts
 - **Search Tab**: Find content across your entire library
-- **Queue Tab**: Manage your playback queue
+- **Queue Tab**: Manage your playback queue with individual track removal
 - **Most Played Tab**: Discover your most frequently played albums with play counts
 - **Recently Played Tab**: Quick access to recently played albums
+- **Recently Added Tab**: Browse newest albums with creation dates
 - **Radio Tab**: Stream internet radio stations configured on your Navidrome server
 
 ### Contextual Information Panel
@@ -181,7 +186,10 @@ The bottom panel dynamically displays relevant information based on your selecti
 - **Right-click** for context menu options:
   - "Add to Queue" - adds without playing
   - "Play Now" - adds to queue and starts playing immediately
+  - "Go to Album/Artist/Song" - navigate to item in Browse tab
 - **Player Bar**: Compact controls with artwork, progress, and time
+- **Time Scrubbing**: Click anywhere on progress bar to seek to that position
+- **Smart Navigation**: "Go to..." context menu options available in all tabs except Browse
 
 ### Queue Management
 - **Queue Tab**: Full queue view with clear button
@@ -247,8 +255,13 @@ pyper-app/
 │   └── FEATURES.md           # Detailed feature documentation
 ├── assets/
 │   ├── pyper.desktop         # Desktop entry file
-│   ├── pyper-icon.png        # Application icon
-│   └── create_icon.py        # Icon generation script
+│   ├── pyper-icon.png        # Application icon (128x128)
+│   ├── pyper-icon-64.png     # Medium icon (64x64)
+│   ├── pyper-icon-48.png     # Standard icon (48x48)
+│   ├── pyper-icon-32.png     # Small icon (32x32)
+│   ├── pyper-icon-16.png     # Tiny icon (16x16)
+│   ├── pyper-icon.ico        # Windows ICO format
+│   └── create_icon.py        # Synthwave icon generation script
 ├── pyper.py                  # Entry point script
 ├── pyper.log                 # Application log file (generated)
 ├── requirements.txt          # Python dependencies
@@ -331,6 +344,22 @@ pip install py-sonic qt-material
 - **[Installation Guide](install-shortcut.sh)**: Desktop integration setup
 
 ## 🎯 Recent Updates
+
+### v2.3 - Enhanced Navigation, Time Scrubbing & Synthwave Icon
+- Added **⏯️ Time Scrubbing**: Click progress bar to seek to any position in tracks
+- Implemented **🆕 Recently Added Albums Tab**: Browse newest albums with creation dates positioned between Queue and Most Played tabs
+- Created **🧭 Smart Navigation System**: "Go to..." context menu options in all non-Browse tabs:
+  - "Go to Album" - navigate to album in Browse > Albums
+  - "Go to Artist" - navigate to artist in Browse > Artists  
+  - "Go to Song" - navigate to album and select specific song
+  - Available in Queue, Search Results, Most Played, Recently Played, and Recently Added tabs
+- Designed **🎨 New Synthwave Icon**: Beautiful neon electric blue soundwave in circle design
+  - Multiple icon sizes (16px to 128px) for all contexts
+  - Windows ICO format support for cross-platform compatibility
+  - Matches synthwave theme aesthetic perfectly
+- Updated **🎨 Synthwave '84 Theme Colors**: Swapped hot pink for electric blue highlights with pink "Now Playing" text
+- Enhanced **📱 Desktop Integration**: Updated desktop shortcut and application menu entries with new icon
+- Improved **🎯 Contextual Panel Layout**: Increased height and better text wrapping to eliminate cutoff issues
 
 ### v2.2 - Advanced Radio with Multi-Source Album Art & ICY Metadata
 - Added **📻 Internet Radio Tab** with full streaming capabilities and advanced metadata support

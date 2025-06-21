@@ -56,7 +56,7 @@ logger.info("Pyper Music Player starting up...")
 DEFAULT_WINDOW_WIDTH = 1400
 DEFAULT_WINDOW_HEIGHT = 900
 PLAYER_BAR_HEIGHT = 100
-CONTEXTUAL_PANEL_HEIGHT = 120
+CONTEXTUAL_PANEL_HEIGHT = 180  # Much taller to prevent text cutoff
 ARTWORK_SIZE = 80
 THUMBNAIL_SIZE = 70
 MAX_CONTEXTUAL_ALBUMS = 8
@@ -321,7 +321,21 @@ class ThemeManager:
         }}
         """
         
+        # Add special styling for now playing label if the color is defined
+        if 'now_playing' in colors:
+            # Store the color for dynamic styling
+            self.now_playing_color = colors['now_playing']
+        else:
+            self.now_playing_color = None
+            
         app.setStyleSheet(stylesheet)
+    
+    def apply_element_specific_styling(self, main_window=None):
+        """Apply theme-specific styling to individual elements"""
+        if hasattr(self, 'now_playing_color') and self.now_playing_color and main_window:
+            # Apply the special now playing color if available
+            if hasattr(main_window, 'now_playing_label'):
+                main_window.now_playing_label.setStyleSheet(f"color: {self.now_playing_color}; font-weight: bold;")
     
     def save_theme_preference(self, theme_id):
         """Save theme preference to config"""
@@ -744,6 +758,17 @@ class CustomSubsonicClient:
             'type': 'byYear',
             'fromYear': from_year,
             'toYear': to_year,
+            'size': size
+        }
+        try:
+            return self._make_request('getAlbumList2', params)
+        except:
+            return None
+    
+    def getAlbumList2_byNewest(self, size=50):
+        """Get recently added albums (newest first)"""
+        params = {
+            'type': 'newest',
             'size': size
         }
         try:
@@ -1368,21 +1393,29 @@ class ContextualInfoPanel(QWidget):
         # Artist info section
         artist_section = QWidget()
         artist_layout = QVBoxLayout(artist_section)
-        artist_layout.setContentsMargins(5, 5, 5, 5)
+        artist_layout.setContentsMargins(15, 15, 15, 15)
+        artist_layout.setSpacing(8)
         
-        # Artist name
-        artist_name = QLabel(f"<b>{artist_data.get('name', 'Unknown Artist')}</b>")
-        artist_name.setStyleSheet("font-size: 14px; color: white;")
+        # Artist name - no height restrictions
+        artist_name_text = artist_data.get('name', 'Unknown Artist')
+        artist_name = QLabel(f"<b>{artist_name_text}</b>")
+        artist_name.setStyleSheet("font-size: 18px; color: white; font-weight: bold; line-height: 1.3;")
+        artist_name.setWordWrap(True)
+        # No maximum height - let it expand as needed
         artist_layout.addWidget(artist_name)
         
         # Artist stats
         album_count = len(albums_data) if albums_data else artist_data.get('albumCount', 0)
         stats = QLabel(f"{album_count} albums")
-        stats.setStyleSheet("color: #ccc; font-size: 12px;")
+        stats.setStyleSheet("color: #ccc; font-size: 14px;")
         artist_layout.addWidget(stats)
         
-        artist_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 10px;")
-        artist_section.setFixedWidth(200)
+        # Add stretch to push content to top
+        artist_layout.addStretch()
+        
+        artist_section.setStyleSheet("background-color: #333; border-radius: 5px; margin-right: 20px;")
+        artist_section.setMinimumWidth(280)  # Wider to prevent text cutting
+        artist_section.setMinimumHeight(160)  # Match the increased contextual panel height
         self.content_layout.addWidget(artist_section)
         
         # Albums section
@@ -1401,11 +1434,11 @@ class ContextualInfoPanel(QWidget):
         album_container = QWidget()
         album_container_layout = QHBoxLayout(album_container)
         album_container_layout.setContentsMargins(0, 0, 0, 0)
-        album_container_layout.setSpacing(10)
+        album_container_layout.setSpacing(20)
         
         # Album artwork (if available)
         artwork_section = QWidget()
-        artwork_section.setFixedSize(100, 100)
+        artwork_section.setFixedSize(150, 150)  # Larger artwork
         artwork_section.setStyleSheet("background-color: #333; border: 1px solid #555; border-radius: 5px;")
         
         artwork_layout = QVBoxLayout(artwork_section)
@@ -1415,7 +1448,7 @@ class ContextualInfoPanel(QWidget):
         artwork_label = QLabel()
         artwork_label.setText("♪")
         artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        artwork_label.setStyleSheet("border: none; background: transparent; color: #888; font-size: 24px;")
+        artwork_label.setStyleSheet("border: none; background: transparent; color: #888; font-size: 32px;")
         artwork_layout.addWidget(artwork_label)
         
         if album_data.get('coverArt') and sonic_client:
@@ -1425,12 +1458,12 @@ class ContextualInfoPanel(QWidget):
             # Load artwork in thread
             def load_artwork():
                 try:
-                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=100)
+                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=150)
                     pixmap = QPixmap()
                     pixmap.loadFromData(image_data)
                     
                     # Scale maintaining aspect ratio, with padding for the container
-                    scaled_pixmap = pixmap.scaled(98, 98, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    scaled_pixmap = pixmap.scaled(148, 148, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     artwork_label.setPixmap(scaled_pixmap)
                     artwork_label.setText("")
                 except:
@@ -1441,24 +1474,28 @@ class ContextualInfoPanel(QWidget):
         
         album_container_layout.addWidget(artwork_section)
         
-        # Album info section - same height as artwork
+        # Album info section - flexible height and width, no text cutting!
         album_info_section = QWidget()
-        album_info_section.setFixedHeight(100)
+        album_info_section.setMinimumHeight(150)  # Match artwork height
+        album_info_section.setMinimumWidth(450)   # Much wider to prevent text cutting
         album_info_section.setStyleSheet("background-color: #333; border-radius: 5px; padding: 5px;")
         
         album_layout = QVBoxLayout(album_info_section)
-        album_layout.setContentsMargins(10, 10, 10, 10)
-        album_layout.setSpacing(5)
+        album_layout.setContentsMargins(20, 20, 20, 20)
+        album_layout.setSpacing(12)
         
-        # Album title
-        title = QLabel(f"<b>{album_data.get('name', 'Unknown Album')}</b>")
-        title.setStyleSheet("font-size: 16px; color: white;")
+        # Album title - no height restrictions, full word wrap
+        title_text = album_data.get('name', 'Unknown Album')
+        title = QLabel(f"<b>{title_text}</b>")
+        title.setStyleSheet("font-size: 18px; color: white; font-weight: bold; line-height: 1.3;")
         title.setWordWrap(True)
+        # No maximum height - let it expand as needed
         album_layout.addWidget(title)
         
-        # Artist
-        artist = QLabel(f"by {album_data.get('artist', 'Unknown Artist')}")
-        artist.setStyleSheet("color: #ccc; font-size: 14px;")
+        # Artist - no height restrictions
+        artist_text = album_data.get('artist', 'Unknown Artist')
+        artist = QLabel(f"by {artist_text}")
+        artist.setStyleSheet("color: #ccc; font-size: 15px; line-height: 1.2;")
         artist.setWordWrap(True)
         album_layout.addWidget(artist)
         
@@ -1473,7 +1510,8 @@ class ContextualInfoPanel(QWidget):
         
         if details:
             details_label = QLabel(" • ".join(details))
-            details_label.setStyleSheet("color: #aaa; font-size: 12px;")
+            details_label.setStyleSheet("color: #aaa; font-size: 13px;")
+            details_label.setWordWrap(True)
             album_layout.addWidget(details_label)
         
         # Add stretch to push content to top
@@ -1488,29 +1526,30 @@ class ContextualInfoPanel(QWidget):
     def create_album_widget(self, album_data, sonic_client=None):
         """Create a small album widget for the contextual panel"""
         widget = QWidget()
-        widget.setFixedSize(80, 100)
+        widget.setFixedSize(120, 160)  # Match the increased panel height
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
         
         # Album artwork
         artwork_label = QLabel()
-        artwork_label.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE)
-        artwork_label.setStyleSheet("border: 1px solid #555; background-color: #444;")
+        artwork_label.setFixedSize(100, 100)  # Much larger thumbnail
+        artwork_label.setStyleSheet("border: 1px solid #555; background-color: #444; border-radius: 4px;")
         artwork_label.setText("♪")
         artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        artwork_label.setStyleSheet(artwork_label.styleSheet() + "; font-size: 20px;")
 
         
         # Load artwork if available
         if album_data.get('coverArt') and sonic_client:
             def load_artwork():
                 try:
-                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=THUMBNAIL_SIZE)
+                    image_data = sonic_client.getCoverArt(album_data['coverArt'], size=100)
                     pixmap = QPixmap()
                     pixmap.loadFromData(image_data)
                     
                     # Scale maintaining aspect ratio, but leave some padding for border
-                    scaled_pixmap = pixmap.scaled(THUMBNAIL_SIZE-2, THUMBNAIL_SIZE-2, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    scaled_pixmap = pixmap.scaled(98, 98, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     artwork_label.setPixmap(scaled_pixmap)
                     artwork_label.setText("")
                 except:
@@ -1520,16 +1559,16 @@ class ContextualInfoPanel(QWidget):
         
         layout.addWidget(artwork_label)
         
-        # Album name (truncated)
+        # Album name - with proper wrapping and no truncation
         name = album_data.get('name', 'Unknown')
-        if len(name) > 12:
-            name = name[:12] + "..."
         name_label = QLabel(name)
-        name_label.setStyleSheet("color: white; font-size: 10px;")
+        name_label.setStyleSheet("color: white; font-size: 11px; font-weight: bold;")
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_label.setWordWrap(True)  # Enable word wrapping
+        name_label.setMaximumHeight(40)  # Allow for multiple lines
         layout.addWidget(name_label)
         
-        widget.setStyleSheet("background-color: #333; border-radius: 3px; margin: 2px;")
+        widget.setStyleSheet("background-color: #333; border-radius: 4px; margin: 3px;")
         return widget
     
     def show_genre_info(self, genre_name, albums_data=None):
@@ -1631,6 +1670,7 @@ class PyperMainWindow(QMainWindow):
         self.play_counts = {}
         self.most_played_albums = []
         self.recently_played_albums = []
+        self.recently_added_albums = []  # New: Recently added albums
         
         # Initialize now playing dialog (keep for backward compatibility)
         self.now_playing_dialog = NowPlayingDialog(self)
@@ -1844,6 +1884,8 @@ class PyperMainWindow(QMainWindow):
                 border-radius: 2px;
             }
         """)
+        # Enable progress bar clicking for time scrubbing
+        self.progress_bar.mousePressEvent = self.progress_bar_clicked
         self.time_label = QLabel("00:00 / 00:00")
         self.time_label.setMinimumWidth(80)
         
@@ -1983,6 +2025,20 @@ class PyperMainWindow(QMainWindow):
         self.queue_list.customContextMenuRequested.connect(self.show_queue_context_menu)
         queue_layout.addWidget(self.queue_list)
         
+        # Recently Added tab
+        recently_added_tab = QWidget()
+        recently_added_layout = QVBoxLayout(recently_added_tab)
+        
+        recently_added_header = QLabel("Recently Added Albums")
+        recently_added_header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        recently_added_layout.addWidget(recently_added_header)
+        
+        self.recently_added_list = QListWidget()
+        self.recently_added_list.itemDoubleClicked.connect(self.recently_added_double_clicked)
+        self.recently_added_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.recently_added_list.customContextMenuRequested.connect(self.show_recently_added_context_menu)
+        recently_added_layout.addWidget(self.recently_added_list)
+        
         # Most Played tab
         most_played_tab = QWidget()
         most_played_layout = QVBoxLayout(most_played_tab)
@@ -2029,6 +2085,7 @@ class PyperMainWindow(QMainWindow):
         self.tab_widget.addTab(browse_tab, "Browse")
         self.tab_widget.addTab(search_tab, "Search")
         self.tab_widget.addTab(queue_tab, "Queue")
+        self.tab_widget.addTab(recently_added_tab, "Recently Added")
         self.tab_widget.addTab(most_played_tab, "Most Played")
         self.tab_widget.addTab(recently_played_tab, "Recently Played")
         self.tab_widget.addTab(radio_tab, "Radio")
@@ -2103,6 +2160,8 @@ class PyperMainWindow(QMainWindow):
         
         # Apply the theme
         if self.theme_manager.apply_theme(self.app, theme_id):
+            # Apply element-specific styling (e.g., now playing color)
+            self.theme_manager.apply_element_specific_styling(self)
             # Save preference
             self.theme_manager.save_theme_preference(theme_id)
             self.status_label.setText(f"Theme changed to: {self.theme_manager.available_themes[theme_id].get('name', theme_id)}")
@@ -2197,6 +2256,9 @@ class PyperMainWindow(QMainWindow):
         
         # Load play count data and populate new tabs
         self.load_play_count_data()
+        
+        # Load recently added albums
+        self.load_recently_added_albums()
         
         # Load radio stations
         self.load_radio_stations()
@@ -2398,6 +2460,24 @@ class PyperMainWindow(QMainWindow):
         # Could show a simple now playing dialog or do nothing
         self.show_now_playing()
     
+    def progress_bar_clicked(self, event):
+        """Handle clicks on progress bar for time scrubbing"""
+        if self.media_player.duration() > 0 and not self.is_playing_radio:
+            # Calculate the position based on click location
+            click_x = event.pos().x()
+            bar_width = self.progress_bar.width()
+            position_ratio = click_x / bar_width
+            
+            # Clamp between 0 and 1
+            position_ratio = max(0, min(1, position_ratio))
+            
+            # Calculate new position in milliseconds
+            new_position = int(self.media_player.duration() * position_ratio)
+            
+            # Seek to new position
+            self.media_player.setPosition(new_position)
+            logger.info(f"Scrubbed to position: {self.format_duration(new_position // 1000)}")
+    
     def perform_search(self):
         """Perform search and display results"""
         query = self.search_input.text().strip()
@@ -2566,12 +2646,25 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
         
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        
         add_to_queue_action = menu.addAction("Add to Queue")
-        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(item.data(Qt.ItemDataRole.UserRole)))
+        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(data))
         
         play_now_action = menu.addAction("Play Now")
         play_now_action.triggered.connect(lambda: self.most_played_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Album" option
+        go_to_album_action = menu.addAction("Go to Album")
+        go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.most_played_list.mapToGlobal(position))
     
@@ -2581,12 +2674,25 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
         
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        
         add_to_queue_action = menu.addAction("Add to Queue")
-        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(item.data(Qt.ItemDataRole.UserRole)))
+        add_to_queue_action.triggered.connect(lambda: self.add_album_songs_to_queue(data))
         
         play_now_action = menu.addAction("Play Now")
         play_now_action.triggered.connect(lambda: self.recently_played_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Album" option
+        go_to_album_action = menu.addAction("Go to Album")
+        go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.recently_played_list.mapToGlobal(position))
     
@@ -2626,12 +2732,20 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
         
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        
         add_to_queue_action = menu.addAction("Add to Queue")
         add_to_queue_action.triggered.connect(lambda: self.add_search_artist_to_queue(item))
         
         play_now_action = menu.addAction("Play Now")
         play_now_action.triggered.connect(lambda: self.search_artist_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Artist" option
+        go_to_artist_action = menu.addAction("Go to Artist")
+        go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.search_artists_list.mapToGlobal(position))
     
@@ -2641,12 +2755,25 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
         
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        
         add_to_queue_action = menu.addAction("Add to Queue")
         add_to_queue_action.triggered.connect(lambda: self.add_search_album_to_queue(item))
         
         play_now_action = menu.addAction("Play Now")
         play_now_action.triggered.connect(lambda: self.search_album_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Album" option
+        go_to_album_action = menu.addAction("Go to Album")
+        go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.search_albums_list.mapToGlobal(position))
     
@@ -2656,12 +2783,30 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
         
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
+        
         add_to_queue_action = menu.addAction("Add to Queue")
         add_to_queue_action.triggered.connect(lambda: self.add_search_song_to_queue(item))
         
         play_now_action = menu.addAction("Play Now")
         play_now_action.triggered.connect(lambda: self.search_song_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Song" option (navigates to album and selects song)
+        go_to_song_action = menu.addAction("Go to Song")
+        go_to_song_action.triggered.connect(lambda: self.go_to_browse_item(data, 'song'))
+        
+        # Add "Go to Album" option if album info is available
+        if data and data.get('album'):
+            go_to_album_action = menu.addAction("Go to Album")
+            go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.search_songs_list.mapToGlobal(position))
     
@@ -2957,6 +3102,7 @@ class PyperMainWindow(QMainWindow):
         if not item:
             return
             
+        data = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         
         # Delete single item
@@ -2966,6 +3112,22 @@ class PyperMainWindow(QMainWindow):
         # Play this item
         play_action = menu.addAction("Play Now")
         play_action.triggered.connect(lambda: self.play_track(self.queue_list.row(item)))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Song" option (navigates to album and selects song)
+        go_to_song_action = menu.addAction("Go to Song")
+        go_to_song_action.triggered.connect(lambda: self.go_to_browse_item(data, 'song'))
+        
+        # Add "Go to Album" option if album info is available
+        if data and data.get('album'):
+            go_to_album_action = menu.addAction("Go to Album")
+            go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
         
         menu.exec(self.queue_list.mapToGlobal(position))
     
@@ -3111,10 +3273,15 @@ class PyperMainWindow(QMainWindow):
     def scrobble_track(self, song_id):
         """Scrobble track to Navidrome"""
         try:
+            logger.info(f"Attempting to scrobble track with ID: {song_id}")
             # Navidrome handles scrobbling automatically when we stream
-            self.sonic_client.scrobble(song_id)
+            result = self.sonic_client.scrobble(song_id)
+            logger.info(f"Scrobble request sent successfully for track {song_id}")
+            logger.debug(f"Scrobble response: {result}")
         except Exception as e:
-            logger.error(f"Scrobbling error: {e}")
+            logger.error(f"Scrobbling error for track {song_id}: {e}")
+            import traceback
+            logger.error(f"Scrobble traceback: {traceback.format_exc()}")
     
     def load_radio_stations(self):
         """Load radio stations from library data"""
@@ -3385,6 +3552,157 @@ class PyperMainWindow(QMainWindow):
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes:02d}:{seconds:02d}"
+    
+    def load_recently_added_albums(self):
+        """Load recently added albums from API"""
+        try:
+            recent_response = self.sonic_client.getAlbumList2_byNewest(50)
+            if recent_response:
+                albums = recent_response.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
+                self.recently_added_albums = albums
+                self.populate_recently_added_list()
+        except Exception as e:
+            logger.error(f"Error loading recently added albums: {e}")
+    
+    def populate_recently_added_list(self):
+        """Populate the recently added albums list"""
+        self.recently_added_list.clear()
+        for album in self.recently_added_albums:
+            album_title = f"{album['name']} - {album['artist']}"
+            if album.get('year'):
+                album_title += f" ({album['year']})"
+            
+            # Add created date if available
+            if album.get('created'):
+                from datetime import datetime
+                try:
+                    # Assuming ISO format timestamp  
+                    dt = datetime.fromisoformat(album['created'].replace('Z', '+00:00'))
+                    album_title += f" • Added: {dt.strftime('%Y-%m-%d')}"
+                except:
+                    pass  # Skip date formatting if it fails
+            
+            list_item = QListWidgetItem(album_title)
+            list_item.setData(Qt.ItemDataRole.UserRole, album)
+            self.recently_added_list.addItem(list_item)
+    
+    def recently_added_double_clicked(self, item):
+        """Handle double-click on recently added album"""
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data:
+            queue_start_index = len(self.current_queue)
+            self.add_album_songs_to_queue(data)
+            if self.current_queue:
+                self.play_track(queue_start_index)
+    
+    def show_recently_added_context_menu(self, position):
+        """Show context menu for recently added albums"""
+        item = self.recently_added_list.itemAt(position)
+        if not item:
+            return
+            
+        data = item.data(Qt.ItemDataRole.UserRole)
+        menu = QMenu(self)
+        
+        add_to_queue_action = menu.addAction("Add to Queue")
+        add_to_queue_action.triggered.connect(lambda: self.add_recently_added_to_queue(item))
+        
+        play_now_action = menu.addAction("Play Now")
+        play_now_action.triggered.connect(lambda: self.recently_added_double_clicked(item))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Album" option
+        go_to_album_action = menu.addAction("Go to Album")
+        go_to_album_action.triggered.connect(lambda: self.go_to_browse_item(data, 'album'))
+        
+        # Add "Go to Artist" option if artist info is available
+        if data and data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_browse_item(data, 'artist'))
+        
+        menu.exec(self.recently_added_list.mapToGlobal(position))
+    
+    def add_recently_added_to_queue(self, item):
+        """Add recently added album to queue without playing"""
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if data:
+            self.add_album_songs_to_queue(data)
+    
+    def go_to_browse_item(self, item_data, item_type):
+        """Navigate to the Browse tab and select the specified item"""
+        try:
+            # Switch to Browse tab (index 0)
+            self.tab_widget.setCurrentIndex(0)
+            
+            if item_type == 'album':
+                # Navigate to Albums category
+                self.category_list.setCurrentRow(1)  # Albums is index 1
+                self.category_selected(self.category_list.item(1))
+                
+                # Find and select the album in the items list
+                for i in range(self.items_list.count()):
+                    list_item = self.items_list.item(i)
+                    list_data = list_item.data(Qt.ItemDataRole.UserRole)
+                    if list_data and list_data.get('id') == item_data.get('id'):
+                        self.items_list.setCurrentRow(i)
+                        self.item_selected(list_item)
+                        break
+                        
+            elif item_type == 'artist':
+                # Navigate to Artists category
+                self.category_list.setCurrentRow(0)  # Artists is index 0
+                self.category_selected(self.category_list.item(0))
+                
+                # Find and select the artist in the items list
+                artist_name = item_data.get('artist', item_data.get('name', ''))
+                for i in range(self.items_list.count()):
+                    list_item = self.items_list.item(i)
+                    list_data = list_item.data(Qt.ItemDataRole.UserRole)
+                    if list_data and list_data.get('name') == artist_name:
+                        self.items_list.setCurrentRow(i)
+                        self.item_selected(list_item)
+                        break
+                        
+            elif item_type == 'song':
+                # For songs, navigate to the album first
+                album_id = item_data.get('albumId')
+                if album_id:
+                    # Find the album in our library data
+                    target_album = None
+                    for album in self.library_data.get('albums', []):
+                        if album.get('id') == album_id:
+                            target_album = album
+                            break
+                    
+                    if target_album:
+                        # Navigate to Albums category
+                        self.category_list.setCurrentRow(1)  # Albums is index 1
+                        self.category_selected(self.category_list.item(1))
+                        
+                        # Find and select the album
+                        for i in range(self.items_list.count()):
+                            list_item = self.items_list.item(i)
+                            list_data = list_item.data(Qt.ItemDataRole.UserRole)
+                            if list_data and list_data.get('id') == album_id:
+                                self.items_list.setCurrentRow(i)
+                                self.item_selected(list_item)
+                                
+                                # Now find and select the song in the songs list
+                                for j in range(self.songs_list.count()):
+                                    song_item = self.songs_list.item(j)
+                                    song_data = song_item.data(Qt.ItemDataRole.UserRole)
+                                    if song_data and song_data.get('id') == item_data.get('id'):
+                                        self.songs_list.setCurrentRow(j)
+                                        break
+                                break
+            
+            self.status_label.setText(f"Navigated to {item_type}: {item_data.get('name', item_data.get('title', 'Unknown'))}")
+            logger.info(f"Navigated to {item_type} in Browse tab: {item_data.get('name', item_data.get('title', 'Unknown'))}")
+            
+        except Exception as e:
+            logger.error(f"Error navigating to browse item: {e}")
+            self.status_label.setText("Failed to navigate to item")
 
 def main():
     """Main application entry point"""
@@ -3402,6 +3720,7 @@ def main():
         
         logger.info(f"Applying initial theme: {theme_id}")
         window.theme_manager.apply_theme(app, theme_id)
+        window.theme_manager.apply_element_specific_styling(window)
     except Exception as e:
         logger.error(f"Failed to apply initial theme: {e}")
         logger.info("Continuing with default theme")

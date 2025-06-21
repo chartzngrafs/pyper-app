@@ -13,10 +13,11 @@ This document provides a comprehensive overview of all features available in Pyp
 
 ### Player Controls
 - **Standard Controls**: Play, Pause, Stop, Previous, Next
-- **Progress Bar**: Visual playback progress with seek functionality (purple themed)
+- **Progress Bar**: Visual playback progress with click-to-seek functionality (themed)
+- **Time Scrubbing**: Click anywhere on progress bar to seek to that position in track
 - **Time Display**: Current time and total duration
 - **Album Artwork**: Clickable artwork that opens detailed track information
-- **Now Playing Display**: Current track title and artist information
+- **Now Playing Display**: Current track title and artist information with theme-specific colors
 
 ## 🗂️ Navigation & Browsing
 
@@ -57,6 +58,7 @@ Pyper provides five distinct browsing categories plus dedicated tabs for enhance
 - **Queue Tab**: Playback queue management with track removal and clear options
 - **Most Played Tab**: Albums ranked by play frequency from database
 - **Recently Played Tab**: Albums ordered by last played date
+- **Recently Added Tab**: Newest albums with creation dates, positioned between Queue and Most Played
 - **Radio Tab**: Internet radio stations with live metadata and album artwork
 
 ### Search Functionality
@@ -146,6 +148,24 @@ Available throughout the interface:
 - **"Play Now"**: Adds to queue and starts playback
 - **"Remove from Queue"**: Removes specific queue items
 
+### Smart Navigation System
+The "Go to..." context menu options provide seamless navigation between tabs:
+
+#### Available in All Non-Browse Tabs
+- **Queue Tab**: "Go to Song", "Go to Album", "Go to Artist"
+- **Search Results**: "Go to Artist", "Go to Album", "Go to Song" (context-dependent)
+- **Most Played Tab**: "Go to Album", "Go to Artist"
+- **Recently Played Tab**: "Go to Album", "Go to Artist"
+- **Recently Added Tab**: "Go to Album", "Go to Artist"
+
+#### Navigation Behavior
+- **"Go to Album"**: Switches to Browse tab, selects Albums category, finds and selects the album
+- **"Go to Artist"**: Switches to Browse tab, selects Artists category, finds and selects the artist
+- **"Go to Song"**: Switches to Browse tab, navigates to album, then selects the specific song
+- **Smart Context Detection**: Only shows relevant options based on available data
+- **Automatic Tab Switching**: Seamlessly switches to Browse tab and navigates to item
+- **Visual Feedback**: Status bar confirms successful navigation
+
 ## 📻 Internet Radio System
 
 ### Radio Station Management
@@ -233,16 +253,24 @@ Available throughout the interface:
 ## 🎨 User Interface
 
 ### Modern Design
-- **Dark Theme**: qt-material dark_teal theme
-- **Purple Accents**: Custom purple progress bar and highlights
+- **Comprehensive Theming**: 8 custom themes with automatic text contrast
+- **Synthwave Aesthetics**: Authentic 80s synthwave theme with electric blue highlights
 - **Clean Layout**: Uncluttered, professional appearance
 - **Responsive Design**: Adapts to different window sizes
+- **Custom Icon System**: Neon electric blue soundwave icon in multiple sizes
+
+### Synthwave Icon Design
+- **Neon Electric Blue Soundwave**: Modern waveform pattern in circle
+- **Multiple Sizes**: 16px, 32px, 48px, 64px, 128px variants
+- **Cross-Platform**: PNG and ICO formats for universal compatibility
+- **Theme Integration**: Matches synthwave aesthetic perfectly
+- **Professional Quality**: Scalable vector-style design
 
 ### Layout Structure
 - **Top Toolbar**: Search bar, refresh button, and status display
-- **Player Bar**: Compact controls with artwork and progress (100-120px height)
-- **Tabbed Browser**: Main content area with multiple tabs
-- **Contextual Panel**: Dynamic bottom panel (120px height) with selection info
+- **Player Bar**: Compact controls with artwork and clickable progress bar (100-120px height)
+- **Tabbed Browser**: Main content area with multiple tabs and smart navigation
+- **Contextual Panel**: Enhanced dynamic bottom panel (180px height) with improved text wrapping and larger artwork
 
 ### Visual Elements
 - **Album Artwork**: Properly scaled artwork throughout interface

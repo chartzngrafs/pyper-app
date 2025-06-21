@@ -2,10 +2,10 @@
     "name": "Synthwave '84",
     "description": "Authentic 80s synthwave theme inspired by the legendary VS Code theme",
     "colors": {
-        "primary": "#f92aad",
-        "primary_light": "#ff7edb",
-        "primary_dark": "#e619a3",
-        "secondary": "#72f1b8",
+        "primary": "#00d4ff",
+        "primary_light": "#4de1ff",
+        "primary_dark": "#00a8cc",
+        "secondary": "#f92aad",
         "background": "#241b2f",
         "surface": "#2a2139",
         "surface_light": "#352746",
@@ -17,6 +17,7 @@
         "pressed": "#42305c",
         "success": "#72f1b8",
         "warning": "#fede5d",
-        "error": "#fe4450"
+        "error": "#fe4450",
+        "now_playing": "#f92aad"
     }
 } 
