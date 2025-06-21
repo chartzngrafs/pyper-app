@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QListWidgetItem, QPushButton, QLabel, QSplitter,
     QMessageBox, QScrollArea, QMenu, QDialog, QTextEdit, QLineEdit, 
-    QTabWidget, QProgressBar, QMenuBar
+    QTabWidget, QProgressBar, QMenuBar, QGridLayout
 )
 from PyQt6.QtGui import QAction, QActionGroup, QIcon, QPainter
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
@@ -336,6 +336,23 @@ class ThemeManager:
             # Apply the special now playing color if available
             if hasattr(main_window, 'now_playing_label'):
                 main_window.now_playing_label.setStyleSheet(f"color: {self.now_playing_color}; font-weight: bold;")
+        
+        # Apply theme colors to album grid if available
+        if main_window and hasattr(main_window, 'album_grid') and self.current_theme:
+            current_theme_data = self.available_themes.get(self.current_theme, {})
+            if 'colors' in current_theme_data:
+                main_window.album_grid.apply_theme_colors(current_theme_data['colors'])
+                
+                # Apply theme colors to subitems container to maintain border
+                if hasattr(main_window, 'subitems_container'):
+                    surface_color = current_theme_data['colors'].get('surface', '#2a2139')
+                    border_color = current_theme_data['colors'].get('border', '#495495')
+                    main_window.subitems_container.setStyleSheet(f"""
+                        QWidget {{
+                            border: 1px solid {border_color};
+                            background-color: transparent;
+                        }}
+                    """)
     
     def save_theme_preference(self, theme_id):
         """Save theme preference to config"""
@@ -1635,6 +1652,355 @@ class ContextualInfoPanel(QWidget):
         
         self.content_layout.addStretch()
 
+class AlbumGridWidget(QWidget):
+    """Custom widget for displaying albums in a 3-column grid with artwork"""
+    album_selected = pyqtSignal(object)  # Emits album data when selected
+    album_double_clicked = pyqtSignal(object)  # Emits album data when double-clicked
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.albums = []
+        self.selected_album = None
+        self.sonic_client = None
+        self.play_counts = {}
+        
+        # Apply the same styling as QListWidget to match other panes
+        # Colors will be set dynamically when theme is applied
+        self.theme_colors = None
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Setup the grid layout"""
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)  # Match other panes
+        self.main_layout.setSpacing(0)
+        
+        # Create scroll area
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setFrameStyle(0)  # Remove frame to match list widgets
+        # Styling will be set when theme colors are available
+        
+        # Create widget to hold the grid
+        self.grid_widget = QWidget()
+        self.grid_layout = QGridLayout(self.grid_widget)
+        self.grid_layout.setSpacing(15)
+        self.grid_layout.setContentsMargins(5, 5, 5, 5)  # Minimal margins
+        
+        self.scroll_area.setWidget(self.grid_widget)
+        
+        # Viewport styling will be set when theme colors are available
+        
+        self.main_layout.addWidget(self.scroll_area)
+        
+    def clear(self):
+        """Clear all albums from the grid"""
+        self.albums = []
+        self.selected_album = None
+        
+        # Clear grid layout
+        while self.grid_layout.count():
+            child = self.grid_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+                
+    def set_sonic_client(self, sonic_client):
+        """Set the sonic client for artwork loading"""
+        self.sonic_client = sonic_client
+        
+    def set_play_counts(self, play_counts):
+        """Set play count data"""
+        self.play_counts = play_counts
+        
+    def apply_theme_colors(self, theme_colors):
+        """Apply theme colors to match other panes"""
+        self.theme_colors = theme_colors
+        
+        surface_color = theme_colors.get('surface', '#2a2139')
+        border_color = theme_colors.get('border', '#495495')
+        
+        # Apply styling to match QListWidget - no border since container handles it
+        self.setStyleSheet(f"""
+            AlbumGridWidget {{
+                background-color: {surface_color};
+                border: none;
+            }}
+        """)
+        
+        # Apply to scroll area
+        self.scroll_area.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {surface_color};
+                border: none;
+            }}
+        """)
+        
+        # Apply to grid widget
+        self.grid_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {surface_color};
+            }}
+        """)
+        
+        # Apply to viewport
+        if self.scroll_area.viewport():
+            self.scroll_area.viewport().setStyleSheet(f"background-color: {surface_color};")
+        
+    def populate_albums(self, albums):
+        """Populate the grid with album data"""
+        self.clear()
+        self.albums = albums
+        
+        # Calculate responsive columns based on widget width
+        self.update_grid_layout()
+        
+    def update_grid_layout(self):
+        """Update grid layout with responsive columns"""
+        if not self.albums:
+            return
+            
+        # Calculate columns based on available width
+        available_width = self.width() if self.width() > 0 else 800  # fallback width
+        album_widget_width = 180 + 15  # widget width + spacing
+        columns = max(1, min(3, available_width // album_widget_width))  # 1-3 columns
+        
+        # Clear existing layout
+        while self.grid_layout.count():
+            child = self.grid_layout.takeAt(0)
+            if child.widget():
+                child.widget().hide()  # Hide instead of delete to reuse
+        
+        # Re-add widgets with new column count
+        for i, album in enumerate(self.albums):
+            row = i // columns
+            col = i % columns
+            
+            album_widget = self.create_album_widget(album)
+            self.grid_layout.addWidget(album_widget, row, col)
+            
+        # Add stretch to push items to top
+        self.grid_layout.setRowStretch(len(self.albums) // columns + 1, 1)
+        
+    def resizeEvent(self, event):
+        """Handle resize events to update grid layout"""
+        super().resizeEvent(event)
+        if hasattr(self, 'albums') and self.albums:
+            # Use QTimer to avoid too frequent updates during resize
+            if not hasattr(self, '_resize_timer'):
+                self._resize_timer = QTimer()
+                self._resize_timer.timeout.connect(self.update_grid_layout)
+                self._resize_timer.setSingleShot(True)
+            self._resize_timer.start(100)  # 100ms delay
+        
+    def create_album_widget(self, album_data):
+        """Create a widget for a single album"""
+        widget = QWidget()
+        widget.setFixedSize(180, 250)
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(0, 0, 0, 0.3);
+                border: 2px solid transparent;
+                border-radius: 8px;
+                padding: 8px;
+            }
+            QWidget:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+            }
+        """)
+        
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(8)
+        
+        # Album artwork
+        artwork_label = QLabel()
+        artwork_label.setFixedSize(150, 150)
+        artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        artwork_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(0, 0, 0, 0.5);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 4px;
+            }
+        """)
+        
+        # Load artwork or show placeholder
+        if album_data.get('coverArt') and self.sonic_client:
+            self.load_album_artwork(artwork_label, album_data['coverArt'])
+        else:
+            artwork_label.setText("♪")
+            artwork_label.setStyleSheet(artwork_label.styleSheet() + """
+                font-size: 48px;
+                color: rgba(255, 255, 255, 0.6);
+            """)
+        
+        layout.addWidget(artwork_label, 0, Qt.AlignmentFlag.AlignCenter)
+        
+        # Album name
+        name_label = QLabel(album_data.get('name', 'Unknown Album'))
+        name_label.setWordWrap(True)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold;
+                font-size: 12px;
+                color: white;
+                background: transparent;
+                border: none;
+            }
+        """)
+        layout.addWidget(name_label)
+        
+        # Year and play count info
+        info_text = ""
+        if album_data.get('year'):
+            info_text += str(album_data['year'])
+            
+        # Add play count if available
+        if album_data['id'] in self.play_counts:
+            play_count = self.play_counts[album_data['id']]['play_count']
+            if play_count > 0:
+                if info_text:
+                    info_text += f" • {play_count} plays"
+                else:
+                    info_text = f"{play_count} plays"
+        
+        if info_text:
+            info_label = QLabel(info_text)
+            info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            info_label.setStyleSheet("""
+                QLabel {
+                    font-size: 10px;
+                    color: rgba(255, 255, 255, 0.8);
+                    background: transparent;
+                    border: none;
+                }
+            """)
+            layout.addWidget(info_label)
+        
+        # Store album data in widget
+        widget.album_data = album_data
+        
+        # Install event filter for mouse events
+        widget.installEventFilter(self)
+        
+        return widget
+        
+    def load_album_artwork(self, label, cover_art_id):
+        """Load album artwork asynchronously"""
+        if self.sonic_client:
+            thread = ImageDownloadThread(self.sonic_client, cover_art_id)
+            thread.image_ready.connect(lambda pixmap: self.set_artwork(label, pixmap))
+            thread.start()
+            # Store thread reference to prevent garbage collection
+            label._thread = thread
+            
+    def set_artwork(self, label, pixmap):
+        """Set the artwork on the label"""
+        if not pixmap.isNull():
+            scaled_pixmap = pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            label.setPixmap(scaled_pixmap)
+        
+    def eventFilter(self, obj, event):
+        """Handle mouse events on album widgets"""
+        if hasattr(obj, 'album_data'):
+            if event.type() == event.Type.MouseButtonPress:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    # Single click - select album
+                    self.select_album_widget(obj)
+                    self.album_selected.emit(obj.album_data)
+                    return True
+            elif event.type() == event.Type.MouseButtonDblClick:
+                if event.button() == Qt.MouseButton.LeftButton:
+                    # Double click - emit double click signal
+                    self.album_double_clicked.emit(obj.album_data)
+                    return True
+            elif event.type() == event.Type.ContextMenu:
+                # Show context menu
+                self.show_context_menu(obj, event.globalPos())
+                return True
+                
+        return super().eventFilter(obj, event)
+        
+    def select_album_widget(self, widget):
+        """Visually select an album widget"""
+        # Clear previous selection
+        if self.selected_album:
+            self.selected_album.setStyleSheet("""
+                QWidget {
+                    background-color: rgba(0, 0, 0, 0.3);
+                    border: 2px solid transparent;
+                    border-radius: 8px;
+                    padding: 8px;
+                }
+                QWidget:hover {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border: 2px solid rgba(255, 255, 255, 0.3);
+                }
+            """)
+            
+        # Select new widget
+        self.selected_album = widget
+        widget.setStyleSheet("""
+            QWidget {
+                background-color: rgba(0, 212, 255, 0.2);
+                border: 2px solid #00d4ff;
+                border-radius: 8px;
+                padding: 8px;
+            }
+            QWidget:hover {
+                background-color: rgba(0, 212, 255, 0.3);
+                border: 2px solid #00d4ff;
+            }
+        """)
+        
+    def show_context_menu(self, widget, global_pos):
+        """Show context menu for album widget"""
+        if not hasattr(widget, 'album_data'):
+            return
+            
+        menu = QMenu(self)
+        
+        add_to_queue_action = menu.addAction("Add to Queue")
+        add_to_queue_action.triggered.connect(lambda: self.add_album_to_queue(widget.album_data))
+        
+        play_now_action = menu.addAction("Play Now")
+        play_now_action.triggered.connect(lambda: self.album_double_clicked.emit(widget.album_data))
+        
+        menu.addSeparator()
+        
+        # Add "Go to Album" option
+        go_to_album_action = menu.addAction("Go to Album")
+        go_to_album_action.triggered.connect(lambda: self.go_to_album(widget.album_data))
+        
+        # Add "Go to Artist" option if artist info is available
+        if widget.album_data.get('artist'):
+            go_to_artist_action = menu.addAction("Go to Artist")
+            go_to_artist_action.triggered.connect(lambda: self.go_to_artist(widget.album_data))
+        
+        menu.exec(global_pos)
+        
+    def add_album_to_queue(self, album_data):
+        """Signal to add album to queue"""
+        # This will be connected to the main window's method
+        if hasattr(self.parent(), 'add_album_to_queue_from_grid'):
+            self.parent().add_album_to_queue_from_grid(album_data)
+            
+    def go_to_album(self, album_data):
+        """Signal to navigate to album"""
+        if hasattr(self.parent(), 'go_to_browse_item'):
+            self.parent().go_to_browse_item(album_data, 'album')
+            
+    def go_to_artist(self, album_data):
+        """Signal to navigate to artist"""
+        if hasattr(self.parent(), 'go_to_browse_item'):
+            artist_data = {'name': album_data.get('artist'), 'id': album_data.get('artistId')}
+            self.parent().go_to_browse_item(artist_data, 'artist')
+
 class PyperMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1929,12 +2295,18 @@ class PyperMainWindow(QMainWindow):
         self.items_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.items_list.customContextMenuRequested.connect(self.show_items_context_menu)
         
-        # Sub-items list
+        # Sub-items list (albums/playlists/etc)
         self.subitems_list = QListWidget()
         self.subitems_list.itemClicked.connect(self.subitem_selected)
         self.subitems_list.itemDoubleClicked.connect(self.subitem_double_clicked)
         self.subitems_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.subitems_list.customContextMenuRequested.connect(self.show_subitems_context_menu)
+        
+        # Album grid widget (for artist albums)
+        self.album_grid = AlbumGridWidget(self)
+        self.album_grid.album_selected.connect(self.album_grid_selected)
+        self.album_grid.album_double_clicked.connect(self.album_grid_double_clicked)
+        self.album_grid.hide()  # Initially hidden
         
         # Songs list
         self.songs_list = QListWidget()
@@ -1944,7 +2316,24 @@ class PyperMainWindow(QMainWindow):
         
         browse_layout.addWidget(self.category_list)
         browse_layout.addWidget(self.items_list)
-        browse_layout.addWidget(self.subitems_list)
+        
+        # Create a stacked widget to hold either subitems_list or album_grid
+        self.subitems_container = QWidget()
+        subitems_container_layout = QVBoxLayout(self.subitems_container)
+        subitems_container_layout.setContentsMargins(0, 0, 0, 0)
+        subitems_container_layout.setSpacing(0)
+        subitems_container_layout.addWidget(self.subitems_list)
+        subitems_container_layout.addWidget(self.album_grid)
+        
+        # Set initial styling for the container - will be updated by theme
+        self.subitems_container.setStyleSheet("""
+            QWidget {
+                border: 1px solid #666;
+                background-color: transparent;
+            }
+        """)
+        
+        browse_layout.addWidget(self.subitems_container)
         browse_layout.addWidget(self.songs_list)
         
         # Search tab
@@ -2246,6 +2635,7 @@ class PyperMainWindow(QMainWindow):
         # Clear current selections
         self.items_list.clear()
         self.subitems_list.clear()
+        self.album_grid.clear()
         self.songs_list.clear()
         self.clear_search_results()
         
@@ -2274,10 +2664,16 @@ class PyperMainWindow(QMainWindow):
         category = item.text()
         self.items_list.clear()
         self.subitems_list.clear()
+        self.album_grid.clear()
         self.songs_list.clear()
+        
+        # Show list and hide grid for all categories
+        self.album_grid.hide()
+        self.subitems_list.show()
         
         # Clear contextual panel when changing categories
         if self.contextual_panel:
+            self.contextual_panel.show()
             self.contextual_panel.show_default_message()
         
         if category == "Artists":
@@ -2344,6 +2740,7 @@ class PyperMainWindow(QMainWindow):
     def item_selected(self, item):
         """Handle item selection in the second pane"""
         self.subitems_list.clear()
+        self.album_grid.clear()
         self.songs_list.clear()
         data = item.data(Qt.ItemDataRole.UserRole)
         
@@ -2351,30 +2748,40 @@ class PyperMainWindow(QMainWindow):
             return
             
         # Determine what type of item was selected
-        if 'albumCount' in data:  # It's an artist, show albums in pane 3
+        if 'albumCount' in data:  # It's an artist, show albums in grid
             try:
                 artist_albums = self.sonic_client.getArtist(data['id'])
                 albums = artist_albums.get('subsonic-response', {}).get('artist', {}).get('album', [])
-                for album in albums:
-                    album_title = f"{album['name']} ({album.get('year', 'Unknown Year')})"
-                    # Add play count if available
-                    if album['id'] in self.play_counts:
-                        play_count = self.play_counts[album['id']]['play_count']
-                        if play_count > 0:
-                            album_title += f" • {play_count} plays"
-                    list_item = QListWidgetItem(album_title)
-                    list_item.setData(Qt.ItemDataRole.UserRole, album)
-                    self.subitems_list.addItem(list_item)
                 
-                # Show artist info in contextual panel
+                # Show album grid and hide list
+                self.subitems_list.hide()
+                self.album_grid.show()
+                
+                # Setup album grid
+                self.album_grid.set_sonic_client(self.sonic_client)
+                self.album_grid.set_play_counts(self.play_counts)
+                
+                # Apply current theme colors
+                if hasattr(self.theme_manager, 'current_theme') and self.theme_manager.current_theme:
+                    current_theme_data = self.theme_manager.available_themes.get(self.theme_manager.current_theme, {})
+                    if 'colors' in current_theme_data:
+                        self.album_grid.apply_theme_colors(current_theme_data['colors'])
+                
+                self.album_grid.populate_albums(albums)
+                
+                # Hide contextual panel for artist album browsing (as requested)
                 if self.contextual_panel:
-                    self.contextual_panel.show_artist_info(data, albums, self.sonic_client)
+                    self.contextual_panel.hide()
                     
             except Exception as e:
                 logger.error(f"Error fetching artist albums: {e}")
                 
         elif 'artist' in data and 'name' in data and 'songCount' in data:  # It's an album, show songs directly in pane 4
             try:
+                # Show list and hide grid
+                self.album_grid.hide()
+                self.subitems_list.show()
+                
                 album_songs = self.sonic_client.getAlbum(data['id'])
                 for song in album_songs.get('subsonic-response', {}).get('album', {}).get('song', []):
                     track_num = str(song.get('track', '0'))
@@ -2392,6 +2799,7 @@ class PyperMainWindow(QMainWindow):
                 
                 # Show album info in contextual panel
                 if self.contextual_panel:
+                    self.contextual_panel.show()
                     self.contextual_panel.show_album_info(data, self.sonic_client)
                     
             except Exception as e:
@@ -2399,6 +2807,10 @@ class PyperMainWindow(QMainWindow):
                 
         elif 'public' in data:  # It's a playlist, show songs directly in pane 4
             try:
+                # Show list and hide grid
+                self.album_grid.hide()
+                self.subitems_list.show()
+                
                 playlist_songs = self.sonic_client.getPlaylist(data['id'])
                 for song in playlist_songs.get('subsonic-response', {}).get('playlist', {}).get('entry', []):
                     song_title = f"{song['title']} - {song.get('artist', 'Unknown Artist')}"
@@ -2408,11 +2820,20 @@ class PyperMainWindow(QMainWindow):
                     list_item = QListWidgetItem(song_title)
                     list_item.setData(Qt.ItemDataRole.UserRole, song)
                     self.songs_list.addItem(list_item)
+                    
+                # Show contextual panel
+                if self.contextual_panel:
+                    self.contextual_panel.show()
+                    
             except Exception as e:
                 logger.error(f"Error fetching playlist songs: {e}")
                 
         elif data.get('type') == 'genre':  # It's a genre, show albums in that genre
             try:
+                # Show list and hide grid
+                self.album_grid.hide()
+                self.subitems_list.show()
+                
                 self.status_label.setText(f"Loading albums for genre: {data['name']}")
                 genre_albums = self.sonic_client.getAlbumList2_byGenre(data['name'])
                 albums = genre_albums.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
@@ -2426,6 +2847,7 @@ class PyperMainWindow(QMainWindow):
                 
                 # Show genre info in contextual panel
                 if self.contextual_panel:
+                    self.contextual_panel.show()
                     self.contextual_panel.show_genre_info(data['name'], albums)
                     
                 self.status_label.setText(f"Loaded {len(albums)} albums for {data['name']}")
@@ -2435,6 +2857,10 @@ class PyperMainWindow(QMainWindow):
                 
         elif data.get('type') == 'decade':  # It's a decade, show albums from that decade
             try:
+                # Show list and hide grid
+                self.album_grid.hide()
+                self.subitems_list.show()
+                
                 self.status_label.setText(f"Loading albums from {data['name']}")
                 decade_albums = self.sonic_client.getAlbumList2_byYear(data['start'], data['end'])
                 albums = decade_albums.get('subsonic-response', {}).get('albumList2', {}).get('album', [])
@@ -2448,6 +2874,7 @@ class PyperMainWindow(QMainWindow):
                 
                 # Show decade info in contextual panel
                 if self.contextual_panel:
+                    self.contextual_panel.show()
                     self.contextual_panel.show_decade_info(data['name'], albums)
                     
                 self.status_label.setText(f"Loaded {len(albums)} albums from {data['name']}")
@@ -3075,6 +3502,61 @@ class PyperMainWindow(QMainWindow):
         if songs_to_add:
             self.add_songs_to_queue(songs_to_add)
     
+    def album_grid_selected(self, album_data):
+        """Handle album selection in the grid"""
+        self.songs_list.clear()
+        
+        if not album_data:
+            return
+            
+        # Show album songs in pane 4
+        try:
+            album_songs = self.sonic_client.getAlbum(album_data['id'])
+            for song in album_songs.get('subsonic-response', {}).get('album', {}).get('song', []):
+                track_num = str(song.get('track', '0'))
+                song_title = f"{track_num.zfill(2)}. {song['title']}"
+                if 'duration' in song:
+                    duration = self.format_duration(song['duration'])
+                    song_title += f" ({duration})"
+                list_item = QListWidgetItem(song_title)
+                list_item.setData(Qt.ItemDataRole.UserRole, song)
+                self.songs_list.addItem(list_item)
+                
+            # Load album artwork
+            if 'coverArt' in album_data:
+                self.load_artwork(album_data['coverArt'])
+                
+        except Exception as e:
+            logger.error(f"Error fetching album songs from grid: {e}")
+    
+    def album_grid_double_clicked(self, album_data):
+        """Handle double-click on album in grid - add to queue and play"""
+        if not album_data:
+            return
+            
+        try:
+            album_songs = self.sonic_client.getAlbum(album_data['id'])
+            songs = album_songs.get('subsonic-response', {}).get('album', {}).get('song', [])
+            if songs:
+                queue_start_index = len(self.current_queue)
+                self.add_songs_to_queue(songs)
+                self.play_track(queue_start_index)
+        except Exception as e:
+            logger.error(f"Error playing album from grid: {e}")
+    
+    def add_album_to_queue_from_grid(self, album_data):
+        """Add album to queue from grid context menu"""
+        if not album_data:
+            return
+            
+        try:
+            album_songs = self.sonic_client.getAlbum(album_data['id'])
+            songs = album_songs.get('subsonic-response', {}).get('album', {}).get('song', [])
+            if songs:
+                self.add_songs_to_queue(songs)
+        except Exception as e:
+            logger.error(f"Error adding album to queue from grid: {e}")
+
     def add_songs_to_queue(self, songs):
         """Add songs to the playback queue"""
         for song in songs:

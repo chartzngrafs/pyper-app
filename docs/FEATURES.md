@@ -25,10 +25,14 @@ This document provides a comprehensive overview of all features available in Pyp
 Pyper provides five distinct browsing categories plus dedicated tabs for enhanced functionality:
 
 #### 1. Artists
-- **Hierarchical Browsing**: Artists → Albums → Songs
+- **Visual Album Grid**: Artists display albums in a responsive 3-column grid with artwork, year, and play counts
+- **Responsive Layout**: Grid adapts from 1-3 columns based on window width with smooth resizing
+- **Album Artwork**: 150x150px album covers with async loading and fallback placeholder
+- **Rich Metadata**: Each album shows title, year, and play count in an elegant card layout
+- **Interactive Grid**: Click to select albums, double-click to play, right-click for context menu
+- **Theme Integration**: Grid seamlessly matches application theme colors and styling
+- **Hierarchical Browsing**: Artists → Visual Album Grid → Songs
 - **Auto-Expansion**: Artists category automatically selected and expanded on startup
-- **Album Thumbnails**: Contextual panel shows album artwork thumbnails for selected artist
-- **Play Count Integration**: Album listings include play counts when available
 
 #### 2. Albums
 - **Complete Album Listing**: All albums with artist information

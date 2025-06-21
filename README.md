@@ -10,6 +10,7 @@ A feature-rich, Linux-first music player application designed specifically for N
 - **📻 Advanced Internet Radio**: Stream radio stations with real-time ICY metadata, multi-source album art, and intelligent track parsing
 - **🎨 Contextual Information Panel**: Dynamic bottom panel showing artist info, album details, and artwork based on your selection
 - **🎵 Multi-Category Navigation**: Browse by Artists, Albums, Playlists, Genres, and Years (decades)
+- **🖼️ Visual Album Grid**: Artists display albums in a beautiful responsive 3-column grid with artwork, metadata, and interactive controls
 - **📊 Play Count Integration**: Display play counts from Navidrome database with remote SSH access support
 - **🎨 Album Art Support**: Automatic album artwork display with proper scaling, centering, and contextual thumbnails
 - **📋 Queue Management**: Full playback queue with individual track management and Clear Queue functionality
@@ -155,7 +156,7 @@ Edit `config/config.json`:
 
 ### Navigation Structure
 - **Browse Tab**: Navigate Artists → Albums → Songs hierarchy (auto-expands artists on startup)
-  - **Artists**: Browse by artist with album thumbnails in contextual panel
+  - **Artists**: Browse by artist with beautiful visual album grid - responsive 3-column layout with artwork, year, and play counts
   - **Albums**: Browse all albums with play count integration
   - **Playlists**: Access your Navidrome playlists
   - **Genres**: Browse music by genre with album previews
