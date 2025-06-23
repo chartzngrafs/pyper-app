@@ -253,10 +253,13 @@ class ThemeManager:
     
     def apply_element_specific_styling(self, main_window=None):
         """Apply theme-specific styling to individual elements"""
-        if hasattr(self, 'now_playing_color') and self.now_playing_color and main_window:
-            # Apply the special now playing color if available
-            if hasattr(main_window, 'now_playing_label'):
+        if main_window and hasattr(main_window, 'now_playing_label'):
+            if hasattr(self, 'now_playing_color') and self.now_playing_color:
+                # Apply the special now playing color if available (synthwave84 theme)
                 main_window.now_playing_label.setStyleSheet(f"color: {self.now_playing_color}; font-weight: bold;")
+            else:
+                # Reset to default styling for other themes (removes pink color)
+                main_window.now_playing_label.setStyleSheet("font-weight: bold;")
         
         # Apply theme colors to album grid if available
         if main_window and hasattr(main_window, 'album_grid') and self.current_theme:
