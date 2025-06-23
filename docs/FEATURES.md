@@ -407,6 +407,7 @@ The "Go to..." context menu options provide seamless navigation between tabs:
 - **Icon Support**: Custom application icon
 - **File Associations**: Potential for music file associations
 - **Comprehensive System Tray**: Full-featured system tray integration with contextual menu and hover controls
+- **MPRIS2 Protocol Support**: Full Linux desktop environment integration with media keys and lock screen controls
 
 ## 🖥️ System Tray Integration
 
@@ -464,10 +465,52 @@ The "Go to..." context menu options provide seamless navigation between tabs:
   - Smart positioning with screen bounds checking
   - Fallback positioning for different desktop environments
 
+## 🖥️ MPRIS2 Desktop Integration
+
+### Media Player Remote Interfacing Specification (MPRIS2)
+- **Full D-Bus Implementation**: Complete MPRIS2 protocol support for Linux desktop environments
+- **Standard Compliance**: Follows MPRIS2 specification for maximum compatibility
+- **Threaded Architecture**: D-Bus service runs in separate thread to avoid blocking Qt UI
+
+### Desktop Media Controls
+- **System Media Keys**: Full support for keyboard media keys (Play/Pause, Next, Previous, Stop)
+- **Desktop Environment Integration**: Works with GNOME, KDE, XFCE, and other desktop environments
+- **Lock Screen Controls**: Playback controls and track information available on lock screens
+- **Notification Area**: Integration with desktop notification systems
+
+### MPRIS2 Capabilities
+- **Playback Control**: 
+  - Play, Pause, Stop, PlayPause toggle
+  - Next Track, Previous Track navigation
+  - Seek functionality with microsecond precision
+  - Position tracking and seeking support
+- **Metadata Broadcasting**: Real-time track information including:
+  - Track title, artist, album, album artist
+  - Track duration, track number, disc number
+  - Genre information and artwork URLs
+  - Unique track identifiers for desktop integration
+- **Player Properties**: 
+  - Playback status (Playing, Paused, Stopped)
+  - Volume control integration
+  - Track navigation capabilities (CanGoNext, CanGoPrevious)
+  - Seeking and control permissions
+
+### Third-Party Application Support
+- **playerctl**: Full compatibility with playerctl command-line tool
+- **Desktop Widgets**: Integration with desktop music widgets and panels
+- **Media Center Applications**: Support for media center remote control applications
+- **Automation Tools**: Scriptable control through D-Bus interface
+
+### Advanced MPRIS2 Features
+- **Artwork Integration**: Temporary artwork files for desktop display
+- **Track Identification**: Unique track IDs for precise control
+- **Property Change Notifications**: Real-time updates to desktop environment
+- **Error Handling**: Robust error recovery and service management
+
 ### Development Features
 - **Modular Architecture**: Clean separation of concerns
 - **Extensible Design**: Easy to add new features
 - **Error Handling**: Comprehensive error recovery
 - **Code Documentation**: Well-documented codebase
 
-This comprehensive feature set makes Pyper a powerful, modern music player specifically designed for Navidrome users who want a rich, desktop music experience with advanced browsing capabilities and contextual information display. 
+This comprehensive feature set makes Pyper a powerful, modern music player specifically designed for Navidrome users who want a rich, desktop music experience with advanced browsing capabilities, contextual information display, and seamless Linux desktop integration. 

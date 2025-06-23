@@ -42,6 +42,7 @@ try:
     from .subsonic_client import CustomSubsonicClient
     from .background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from .ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget, MiniPlayerDialog
+    from .desktop_integration import DesktopIntegrationManager
 except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
@@ -52,6 +53,7 @@ except ImportError:
     from subsonic_client import CustomSubsonicClient
     from background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget
+    from desktop_integration import DesktopIntegrationManager
 
 # Setup logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
@@ -185,6 +187,9 @@ class PyperMainWindow(QMainWindow):
         # Setup system tray icon
         self.setup_tray_icon()
         
+        # Initialize desktop integration (MPRIS2)
+        self.desktop_integration = DesktopIntegrationManager(self)
+        
         # Connect to Navidrome
         self.connect_to_navidrome()
     
@@ -210,6 +215,10 @@ class PyperMainWindow(QMainWindow):
             # Clean up temporary database files
             if hasattr(self, 'db_helper'):
                 self.db_helper.cleanup()
+                
+            # Clean up desktop integration
+            if hasattr(self, 'desktop_integration'):
+                self.desktop_integration.cleanup()
         except Exception as e:
             # Log error but don't prevent close
             logger.error(f"Error during close: {e}")
@@ -2189,6 +2198,10 @@ class PyperMainWindow(QMainWindow):
                 
                 # Update tray status
                 self.update_tray_status()
+                
+                # Update desktop integration (MPRIS2)
+                if hasattr(self, 'desktop_integration'):
+                    self.desktop_integration.update_track_metadata(song, self.current_artwork_pixmap)
                     
                 # Scrobble to Navidrome
                 self.scrobble_track(song['id'])
@@ -2287,6 +2300,13 @@ class PyperMainWindow(QMainWindow):
         
         # Update mini player artwork
         self.mini_player.update_artwork(pixmap)
+        
+        # Update desktop integration (MPRIS2) with new artwork
+        if (hasattr(self, 'desktop_integration') and 
+            self.current_playing_index >= 0 and 
+            self.current_playing_index < len(self.current_queue)):
+            current_song = self.current_queue[self.current_playing_index]
+            self.desktop_integration.update_track_metadata(current_song, pixmap)
     
     def scrobble_track(self, song_id):
         """Scrobble track to Navidrome"""

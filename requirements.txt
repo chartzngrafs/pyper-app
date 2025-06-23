@@ -1,4 +1,6 @@
 PyQt6>=6.4.0
 PyQt6-Qt6>=6.4.0
 py-sonic>=1.0.0
-qt-material>=2.14 
+qt-material>=2.14
+dbus-python>=1.2.0
+PyGObject>=3.42.0 

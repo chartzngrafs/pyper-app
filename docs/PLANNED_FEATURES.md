@@ -14,14 +14,11 @@ The following features have been successfully implemented and are now available 
 - ✅ **Dynamic Hover Player**: Click tray for instant 280x100px popup with controls and track info
 - ✅ **Rich Tooltips**: Multi-line tooltips with track information and visual symbols
 - ✅ **Wayland Compatibility**: Proper popup positioning and window management
+- ✅ **MPRIS2 Protocol Support**: Full D-Bus implementation with media keys, lock screen controls, and desktop environment integration
 
 ## 🐧 Deep Linux Desktop Integration (Remaining)
 
-### MPRIS2 Protocol Support
-- **Full MPRIS2 D-Bus Implementation**: Complete media control protocol support for Linux desktop environments
-- **Desktop Media Control**: Integration with system media keys and desktop media controls
-- **Lock Screen Integration**: Playback controls and track information on KDE/GNOME lock screens
-- **Metadata Broadcasting**: Real-time artist, album, track, and artwork information to desktop services
+
 
 ### Enhanced Desktop Experience (Remaining)
 - **Global Hotkeys System**:

@@ -409,6 +409,20 @@ Pyper follows a clean, modular architecture with separation of concerns:
 
 ## 🎯 Recent Updates
 
+### v2.6 - MPRIS2 Desktop Integration
+- **🖥️ Full MPRIS2 Protocol Support**: Complete Linux desktop environment integration:
+  - **System Media Keys**: Full support for keyboard media keys (Play/Pause, Next, Previous, Stop)
+  - **Desktop Environment Integration**: Works seamlessly with GNOME, KDE, XFCE, and other desktop environments
+  - **Lock Screen Controls**: Playback controls and track information available on lock screens
+  - **Third-Party Application Support**: Full compatibility with playerctl, desktop widgets, and media center applications
+  - **Real-Time Metadata Broadcasting**: Track title, artist, album, artwork, and duration information
+  - **Threaded D-Bus Service**: Non-blocking implementation that doesn't interfere with Qt UI performance
+- **🎮 Media Control Integration**: Native support for:
+  - Desktop media control widgets and panels
+  - Automation tools and scripting through D-Bus interface
+  - Media center remote control applications
+  - System notification area integration
+
 ### v2.5 - System Tray Integration & Mini Player Mode
 - **🖥️ Comprehensive System Tray Integration**: Full-featured system tray icon with native Linux desktop integration:
   - **Dynamic Tooltips**: Rich multi-line tooltips showing current track with visual symbols (♪ 🎤 💿)
