@@ -2,6 +2,47 @@
 
 This document provides a comprehensive overview of all features available in Pyper, the modern Navidrome music player.
 
+## 🏗️ Architecture & Code Quality
+
+### Modular Design
+Pyper follows a clean, modular architecture with separation of concerns across focused modules:
+
+#### Core Modules (1,957 lines total)
+- **`theme_manager.py`** (298 lines): Complete theme management system
+  - Custom and qt-material theme support
+  - Real-time theme switching with automatic contrast calculation
+  - Theme preference persistence and element-specific styling
+- **`database_helper.py`** (251 lines): Database operations with SSH remote access
+  - Secure SSH connection management with key-based authentication
+  - Play count queries and database synchronization
+  - Automatic cleanup and error handling
+- **`subsonic_client.py`** (198 lines): Enhanced Navidrome/Subsonic API client
+  - Full authentication and session management
+  - Comprehensive endpoint support with error handling
+  - Extended functionality for genres, years, and radio stations
+- **`background_tasks.py`** (465 lines): Threaded operations for non-blocking UI
+  - `LibraryRefreshThread`: Asynchronous library data loading
+  - `ImageDownloadThread`: Concurrent album artwork downloading with lifecycle management
+  - `ICYMetadataParser`: Advanced radio metadata parsing with multi-source artwork
+- **`ui_components.py`** (745 lines): Reusable UI widgets and specialized components
+  - `NowPlayingDialog`: Detailed track information flyout
+  - `ContextualInfoPanel`: Dynamic bottom panel with selection-based content
+  - `AlbumGridWidget`: Responsive album grid with artwork and interactive controls
+
+#### Main Application
+- **`main.py`** (2,325 lines): Core application logic, UI layout, and event handling
+  - **45% size reduction** from original 4,216 lines through modularization
+  - Clean separation of UI logic from utility classes
+  - Enhanced maintainability and testability
+
+### Architecture Benefits
+- **Thread Safety**: Proper thread lifecycle management prevents crashes and UI freezing
+- **Maintainability**: Each module handles a single responsibility with clear interfaces
+- **Performance**: Background operations don't block the main UI thread
+- **Testability**: Modular design enables focused unit testing of individual components
+- **Reusability**: Components can be reused across different parts of the application
+- **Scalability**: Easy to extend functionality by adding new modules or enhancing existing ones
+
 ## 🎵 Core Music Player Features
 
 ### Audio Playback

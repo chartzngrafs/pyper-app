@@ -246,31 +246,46 @@ The bottom panel dynamically displays relevant information based on your selecti
 pyper-app/
 ├── src/
 │   └── pyper/
-│       ├── __init__.py        # Package initialization  
-│       └── main.py            # Main application code
+│       ├── __init__.py           # Package initialization  
+│       ├── main.py               # Main application (2,325 lines)
+│       ├── theme_manager.py      # Theme management system (298 lines)
+│       ├── database_helper.py    # Database operations with SSH (251 lines)
+│       ├── subsonic_client.py    # Navidrome API client (198 lines)
+│       ├── background_tasks.py   # Threading and async operations (465 lines)
+│       └── ui_components.py      # UI widgets and dialogs (745 lines)
 ├── config/
-│   ├── config.example.json    # Example configuration
-│   └── config.json           # Your configuration (ignored by git)
+│   ├── config.example.json      # Example configuration
+│   └── config.json             # Your configuration (ignored by git)
+├── themes/
+│   ├── dark_teal.json          # Dark teal theme (default)
+│   ├── cobalt_blue.json        # Cobalt blue theme
+│   ├── synthwave84.json        # Synthwave '84 theme
+│   ├── dracula.json            # Dracula theme
+│   ├── tokyo_midnight.json     # Tokyo midnight theme
+│   ├── hacker_green.json       # Matrix-inspired green theme
+│   ├── ibm_patina_yellow.json  # IBM vintage yellow theme
+│   ├── monochrome.json         # Black/white/gray theme
+│   └── README.md               # Theme system documentation
 ├── docs/
-│   ├── DATABASE_SETUP.md     # Database configuration guide
-│   └── FEATURES.md           # Detailed feature documentation
+│   ├── DATABASE_SETUP.md       # Database configuration guide
+│   └── FEATURES.md             # Detailed feature documentation
 ├── assets/
-│   ├── pyper.desktop         # Desktop entry file
-│   ├── pyper-icon.png        # Application icon (128x128)
-│   ├── pyper-icon-64.png     # Medium icon (64x64)
-│   ├── pyper-icon-48.png     # Standard icon (48x48)
-│   ├── pyper-icon-32.png     # Small icon (32x32)
-│   ├── pyper-icon-16.png     # Tiny icon (16x16)
-│   ├── pyper-icon.ico        # Windows ICO format
-│   └── create_icon.py        # Synthwave icon generation script
-├── pyper.py                  # Entry point script
-├── pyper.log                 # Application log file (generated)
-├── requirements.txt          # Python dependencies
-├── run-pyper.sh             # Launch script with config check
-├── install-shortcut.sh      # Desktop shortcut installer
-├── setup.py                 # Package setup
-├── .gitignore              # Git ignore patterns
-└── README.md               # This file
+│   ├── pyper.desktop           # Desktop entry file
+│   ├── pyper-icon.png          # Application icon (128x128)
+│   ├── pyper-icon-64.png       # Medium icon (64x64)
+│   ├── pyper-icon-48.png       # Standard icon (48x48)
+│   ├── pyper-icon-32.png       # Small icon (32x32)
+│   ├── pyper-icon-16.png       # Tiny icon (16x16)
+│   ├── pyper-icon.ico          # Windows ICO format
+│   └── create_icon.py          # Synthwave icon generation script
+├── logs/                       # Application logs directory
+├── pyper.py                    # Entry point script
+├── requirements.txt            # Python dependencies
+├── run-pyper.sh               # Launch script with config check
+├── install-shortcut.sh        # Desktop shortcut installer
+├── setup.py                   # Package setup
+├── .gitignore                 # Git ignore patterns
+└── README.md                  # This file
 ```
 
 ## 🛠️ Troubleshooting
@@ -325,12 +340,36 @@ pip install py-sonic qt-material
 - **SQLite3**: Database access for play count data
 - **SSH/SCP**: Remote database access capabilities
 
-### Key Components
-- **ContextualInfoPanel**: Dynamic bottom panel showing selection-based information
-- **NavidromeDBHelper**: Database access with SSH support for play count data
-- **CustomSubsonicClient**: Enhanced API client with genre and year support
-- **LibraryRefreshThread**: Threaded library loading for responsive UI
-- **ImageDownloadThread**: Asynchronous artwork loading
+### Modular Architecture
+
+Pyper follows a clean, modular architecture with separation of concerns:
+
+#### Core Modules
+- **`main.py`** (2,325 lines): Main application window, UI layout, event handling, and application logic
+- **`theme_manager.py`** (298 lines): Complete theme management system with custom and qt-material theme support
+- **`database_helper.py`** (251 lines): Database operations with SSH remote access for play count data
+- **`subsonic_client.py`** (198 lines): Enhanced Navidrome/Subsonic API client with comprehensive endpoint support
+- **`background_tasks.py`** (465 lines): Threaded operations for non-blocking UI performance
+- **`ui_components.py`** (745 lines): Reusable UI widgets and specialized dialog components
+
+#### Key Components
+- **`ThemeManager`**: Handles theme loading, application, and real-time switching with automatic contrast calculation
+- **`NavidromeDBHelper`**: SSH-based remote database access with connection management and play count queries  
+- **`CustomSubsonicClient`**: Full-featured API client with authentication, error handling, and extended endpoints
+- **`LibraryRefreshThread`**: Asynchronous library data loading for responsive startup and navigation
+- **`ImageDownloadThread`**: Concurrent album artwork downloading with proper thread lifecycle management
+- **`ICYMetadataParser`**: Advanced internet radio metadata parsing with multi-source album artwork fetching
+- **`ContextualInfoPanel`**: Dynamic bottom panel with selection-based information display
+- **`AlbumGridWidget`**: Responsive album grid with artwork, metadata, and interactive controls
+- **`NowPlayingDialog`**: Detailed track information flyout with enhanced artwork display
+
+#### Architecture Benefits
+- **Separation of Concerns**: Each module handles a specific responsibility
+- **Maintainability**: Clean interfaces between components make updates easier
+- **Thread Safety**: Proper thread management prevents UI freezing and crashes
+- **Testability**: Modular design enables focused unit testing
+- **Reusability**: Components can be reused across different parts of the application
+- **Performance**: Background operations don't block the main UI thread
 
 ### Logging System
 - Comprehensive logging throughout the application
@@ -345,6 +384,28 @@ pip install py-sonic qt-material
 - **[Installation Guide](install-shortcut.sh)**: Desktop integration setup
 
 ## 🎯 Recent Updates
+
+### v2.4 - Modular Architecture & Code Quality Improvements
+- **🏗️ Complete Code Modularization**: Refactored monolithic 4,216-line main.py into clean, focused modules:
+  - Extracted `ThemeManager` class to `theme_manager.py` (298 lines)
+  - Extracted `NavidromeDBHelper` class to `database_helper.py` (251 lines) 
+  - Extracted `CustomSubsonicClient` class to `subsonic_client.py` (198 lines)
+  - Extracted threading classes to `background_tasks.py` (465 lines)
+  - Extracted UI components to `ui_components.py` (745 lines)
+  - **45% code reduction**: main.py reduced from 4,216 → 2,325 lines
+- **🧵 Enhanced Thread Safety**: Fixed critical thread management issues preventing app crashes:
+  - Added proper thread cleanup in `AlbumGridWidget` with `active_threads` tracking
+  - Implemented `cleanup_threads()` method for safe thread termination
+  - Enhanced application close event to prevent orphaned threads
+  - Fixed "QThread: Destroyed while thread is still running" crashes
+- **🔧 Improved Maintainability**: Clean separation of concerns with focused responsibilities:
+  - Each module handles a single aspect (themes, database, API, UI, threading)
+  - Simple import system with no complex dependencies
+  - Self-contained classes with clear interfaces
+  - Better error handling and logging throughout
+- **⚡ Performance Optimizations**: Background operations no longer block main UI thread
+- **🧪 Enhanced Testability**: Modular design enables focused unit testing of individual components
+- **📚 Updated Documentation**: Comprehensive architecture documentation with module responsibilities
 
 ### v2.3 - Enhanced Navigation, Time Scrubbing & Synthwave Icon
 - Added **⏯️ Time Scrubbing**: Click progress bar to seek to any position in tracks
