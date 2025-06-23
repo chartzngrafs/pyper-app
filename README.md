@@ -4,7 +4,7 @@ A feature-rich, Linux-first music player application designed specifically for N
 
 ## ✨ Features
 
-- **🐧 Linux-First Design**: Optimized for Linux desktop environments
+- **🐧 Linux-First Design**: Optimized for Linux desktop environments with comprehensive system tray integration
 - **🔍 Powerful Search**: Search across artists, albums, and songs with dedicated search tab
 - **🎯 Enhanced Tabbed Interface**: Browse, Search, Queue, Most Played, Recently Played, Recently Added, and Radio tabs
 - **📻 Advanced Internet Radio**: Stream radio stations with real-time ICY metadata, multi-source album art, and intelligent track parsing
@@ -17,7 +17,7 @@ A feature-rich, Linux-first music player application designed specifically for N
 - **🎵 Scrobbling**: Last.fm compatible scrobbling through Navidrome
 - **🌈 Comprehensive Theming System**: 8 custom themes plus qt-material themes with automatic text contrast
 - **🖱️ Context Menus**: Right-click options throughout the interface with "Go to..." navigation
-- **⚡ Smart Playback**: Double-click anywhere to add and play immediately
+- **⚡ Smart Playbook & Album Queueing**: Double-click songs to auto-queue remainder of album from that track onward
 - **🚀 Auto-Expand**: Artists automatically expanded on startup for immediate browsing
 - **📝 Comprehensive Logging**: File and console logging for debugging and monitoring
 - **🔗 Remote Database Access**: SSH-based access to remote Navidrome databases for play count data
@@ -26,6 +26,8 @@ A feature-rich, Linux-first music player application designed specifically for N
 - **🆕 Recently Added Albums**: Dedicated tab showing newest albums with creation dates
 - **🧭 Smart Navigation**: "Go to..." context menu options to jump between tabs and find items in Browse section
 - **🎨 Synthwave Icon**: Beautiful neon electric blue soundwave icon matching the synthwave aesthetic
+- **🖥️ System Tray Integration**: Full-featured system tray with contextual menu, hover controls, and rich tooltips
+- **📱 Mini Player Mode**: Compact 350x120px player with complete controls and theme integration
 
 ## 🎨 Theming System
 
@@ -183,7 +185,7 @@ The bottom panel dynamically displays relevant information based on your selecti
 4. Double-click or right-click any result to play or queue
 
 ### Playback Controls
-- **Double-click** any item to add to queue and start playing
+- **Double-click** any song to auto-queue remainder of album from that track onward
 - **Right-click** for context menu options:
   - "Add to Queue" - adds without playing
   - "Play Now" - adds to queue and starts playing immediately
@@ -191,6 +193,28 @@ The bottom panel dynamically displays relevant information based on your selecti
 - **Player Bar**: Compact controls with artwork, progress, and time
 - **Time Scrubbing**: Click anywhere on progress bar to seek to that position
 - **Smart Navigation**: "Go to..." context menu options available in all tabs except Browse
+
+### System Tray Integration
+- **System Tray Icon**: Application runs in system tray with dynamic tooltips showing current track
+- **Tray Click Actions**:
+  - **Single Click**: Show dynamic hover popup with controls and track info
+  - **Double Click**: Toggle main window visibility
+  - **Middle Click**: Play/pause toggle (Linux standard)
+- **Tray Context Menu**: Right-click for full menu with:
+  - Complete playback controls (Play/Pause, Previous, Next, Stop)
+  - Queue status display ("Queue: X tracks (Playing #Y)")
+  - Theme switching submenu with all 8 themes
+  - Window management (Show/Hide Main Window, Show Mini Player)
+- **Rich Tooltips**: Multi-line tooltips showing track title (♪), artist (🎤), and album (💿)
+- **Hover Popup Player**: 280x100px popup with album artwork, track info, and playback controls
+
+### Mini Player Mode
+- **Compact Interface**: 350x120px resizable window perfect for multitasking
+- **Complete Controls**: Previous, play/pause, stop, next buttons with theme integration
+- **Interactive Progress Bar**: Click-to-scrub functionality in compact format
+- **Album Artwork**: 80x80px artwork display with current track information
+- **Expand Button**: One-click return to full player interface
+- **Theme Consistency**: Automatically matches current application theme colors
 
 ### Queue Management
 - **Queue Tab**: Full queue view with clear button
@@ -384,6 +408,26 @@ Pyper follows a clean, modular architecture with separation of concerns:
 - **[Installation Guide](install-shortcut.sh)**: Desktop integration setup
 
 ## 🎯 Recent Updates
+
+### v2.5 - System Tray Integration & Mini Player Mode
+- **🖥️ Comprehensive System Tray Integration**: Full-featured system tray icon with native Linux desktop integration:
+  - **Dynamic Tooltips**: Rich multi-line tooltips showing current track with visual symbols (♪ 🎤 💿)
+  - **Tray Contextual Menu**: Complete playback controls, queue status, theme switching, and window management
+  - **Interactive Click Actions**: Single click for hover popup, double click to toggle window, middle click for play/pause
+  - **Real-Time Updates**: All tray elements update automatically with track changes and queue modifications
+- **📱 Mini Player Mode**: Compact 350x120px player window designed for multitasking:
+  - **Complete Playback Controls**: Previous, play/pause, stop, next with full functionality
+  - **Interactive Progress Bar**: Click-to-scrub functionality in compact format
+  - **Album Artwork Display**: 80x80px artwork with current track information
+  - **Theme Integration**: Automatically matches current application theme colors
+  - **Expand Button**: One-click return to full player interface
+- **⚡ Smart Album Queueing**: Double-click any song to automatically queue remainder of album from that track onward
+- **🎯 Dynamic Hover Player**: Click tray icon for instant 280x100px popup with:
+  - Album artwork (64x64px) and track information
+  - Playback controls with theme-consistent styling
+  - Auto-hide functionality (3 seconds idle, 1 second after mouse leaves)
+  - Smart positioning with Wayland compatibility and screen bounds checking
+- **🔧 Enhanced Desktop Integration**: Proper window management, theme consistency, and cross-desktop environment support
 
 ### v2.4 - Modular Architecture & Code Quality Improvements
 - **🏗️ Complete Code Modularization**: Refactored monolithic 4,216-line main.py into clean, focused modules:

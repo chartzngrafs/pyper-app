@@ -24,10 +24,10 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QListWidgetItem, QPushButton, QLabel, QSplitter,
     QMessageBox, QScrollArea, QMenu, QDialog, QTextEdit, QLineEdit, 
-    QTabWidget, QProgressBar, QMenuBar, QGridLayout
+    QTabWidget, QProgressBar, QMenuBar, QGridLayout, QSystemTrayIcon
 )
 from PyQt6.QtGui import QAction, QActionGroup, QIcon, QPainter
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer, QPoint
 from PyQt6.QtGui import QPixmap, QFont
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
@@ -41,7 +41,7 @@ try:
     from .database_helper import NavidromeDBHelper
     from .subsonic_client import CustomSubsonicClient
     from .background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
-    from .ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget
+    from .ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget, MiniPlayerDialog
 except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
@@ -151,6 +151,15 @@ class PyperMainWindow(QMainWindow):
         # Initialize now playing dialog (keep for backward compatibility)
         self.now_playing_dialog = NowPlayingDialog(self)
         
+        # Initialize mini player
+        self.mini_player = MiniPlayerDialog(self)
+        self.setup_mini_player_connections()
+        self._is_closing = False
+        
+        # Initialize tray hover widget
+        self.tray_hover_widget = TrayHoverWidget(self)
+        self.setup_tray_hover_connections()
+        
         # Initialize contextual info panel
         self.contextual_panel = None
         
@@ -173,23 +182,38 @@ class PyperMainWindow(QMainWindow):
         # Set application icon
         self.set_application_icon()
         
+        # Setup system tray icon
+        self.setup_tray_icon()
+        
         # Connect to Navidrome
         self.connect_to_navidrome()
     
     def closeEvent(self, event):
         """Handle application close event"""
-        # Stop radio metadata parsing
-        if hasattr(self, 'icy_parser') and self.icy_parser:
-            self.icy_parser.stop()
-            self.icy_parser.wait()
+        # Set closing flag to prevent mini player interference
+        self._is_closing = True
         
-        # Clean up album grid threads
-        if hasattr(self, 'album_grid') and self.album_grid:
-            self.album_grid.cleanup_threads()
+        try:
+            # Close mini player first to prevent interference
+            if hasattr(self, 'mini_player') and self.mini_player:
+                self.mini_player.hide()  # Hide instead of close to avoid recursion
+                
+            # Stop radio metadata parsing
+            if hasattr(self, 'icy_parser') and self.icy_parser:
+                self.icy_parser.stop()
+                self.icy_parser.wait()
             
-        # Clean up temporary database files
-        if hasattr(self, 'db_helper'):
-            self.db_helper.cleanup()
+            # Clean up album grid threads
+            if hasattr(self, 'album_grid') and self.album_grid:
+                self.album_grid.cleanup_threads()
+                
+            # Clean up temporary database files
+            if hasattr(self, 'db_helper'):
+                self.db_helper.cleanup()
+        except Exception as e:
+            # Log error but don't prevent close
+            logger.error(f"Error during close: {e}")
+            
         event.accept()
         
     def setup_ui(self):
@@ -232,6 +256,34 @@ class PyperMainWindow(QMainWindow):
             }
         """)
         
+        # Mini Player button
+        self.mini_player_button = QPushButton("⧉")
+        self.mini_player_button.setToolTip("Switch to Mini Player")
+        self.mini_player_button.clicked.connect(self.toggle_mini_player)
+        self.mini_player_button.setMinimumWidth(35)
+        self.mini_player_button.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 20px;
+                padding: 4px 8px;
+                border: 1px solid #666;
+                border-radius: 4px;
+                background-color: #444;
+                color: #fff;
+                text-align: center;
+                line-height: 1;
+                min-width: 60px;
+                max-width: 60px;
+            }
+            QPushButton:hover {
+                background-color: #555;
+                border: 1px solid #888;
+            }
+            QPushButton:pressed {
+                background-color: #333;
+            }
+        """)
+        
         # Controls
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.refresh_library)
@@ -259,6 +311,7 @@ class PyperMainWindow(QMainWindow):
         toolbar_layout.addWidget(self.search_input)
         toolbar_layout.addWidget(self.search_button)
         toolbar_layout.addStretch()
+        toolbar_layout.addWidget(self.mini_player_button)
         toolbar_layout.addWidget(self.refresh_button)
         toolbar_layout.addWidget(self.status_label)
         
@@ -641,6 +694,19 @@ class PyperMainWindow(QMainWindow):
         info_action.triggered.connect(self.show_theme_info)
         theme_menu.addAction(info_action)
         
+        # Add mini player toggle
+        view_menu.addSeparator()
+        mini_player_action = QAction('Switch to Mini Player', self)
+        mini_player_action.triggered.connect(self.toggle_mini_player)
+        view_menu.addAction(mini_player_action)
+        
+        # Add File menu for quit option
+        file_menu = menubar.addMenu('File')
+        quit_action = QAction('Quit', self)
+        quit_action.setShortcut('Ctrl+Q')
+        quit_action.triggered.connect(self.force_quit)
+        file_menu.addAction(quit_action)
+        
     def setup_connections(self):
         """Setup signal connections"""
         pass
@@ -665,6 +731,13 @@ class PyperMainWindow(QMainWindow):
         if self.theme_manager.apply_theme(self.app, theme_id):
             # Apply element-specific styling (e.g., now playing color)
             self.theme_manager.apply_element_specific_styling(self)
+            
+            # Apply theme to mini player
+            if hasattr(self, 'mini_player'):
+                theme_data = self.theme_manager.available_themes.get(theme_id, {})
+                theme_colors = theme_data.get('colors', {})
+                self.mini_player.apply_theme_colors(theme_colors)
+            
             # Save preference
             self.theme_manager.save_theme_preference(theme_id)
             self.status_label.setText(f"Theme changed to: {self.theme_manager.available_themes[theme_id].get('name', theme_id)}")
@@ -701,6 +774,212 @@ class PyperMainWindow(QMainWindow):
                 logger.warning(f"Icon file not found at: {icon_path}")
         except Exception as e:
             logger.error(f"Failed to set application icon: {e}")
+    
+    def setup_tray_icon(self):
+        """Setup system tray icon with contextual menu"""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            logger.warning("System tray is not available")
+            return
+            
+        # Create tray icon
+        self.tray_icon = QSystemTrayIcon(self)
+        
+        # Set tray icon
+        try:
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'assets', 'pyper-icon.png')
+            if os.path.exists(icon_path):
+                self.tray_icon.setIcon(QIcon(icon_path))
+            else:
+                # Fallback to default icon
+                self.tray_icon.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_MediaPlay))
+        except Exception as e:
+            logger.error(f"Failed to set tray icon: {e}")
+            self.tray_icon.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_MediaPlay))
+        
+        # Create tray menu
+        self.create_tray_menu()
+        
+        # Connect tray icon signals
+        self.tray_icon.activated.connect(self.tray_icon_activated)
+        
+        # Simplified approach - just use click activation for now
+        # Hover detection over system tray icons is complex and unreliable
+        
+        # Show tray icon
+        self.tray_icon.show()
+        self.tray_icon.setToolTip("Pyper Music Player")
+        
+        logger.info("System tray icon initialized")
+    
+    def create_tray_menu(self):
+        """Create the system tray contextual menu"""
+        self.tray_menu = QMenu()
+        
+        # Playback controls
+        self.tray_play_pause_action = QAction("Play", self)
+        self.tray_play_pause_action.triggered.connect(self.play_pause)
+        self.tray_menu.addAction(self.tray_play_pause_action)
+        
+        self.tray_previous_action = QAction("Previous", self)
+        self.tray_previous_action.triggered.connect(self.previous_track)
+        self.tray_menu.addAction(self.tray_previous_action)
+        
+        self.tray_next_action = QAction("Next", self)
+        self.tray_next_action.triggered.connect(self.next_track)
+        self.tray_menu.addAction(self.tray_next_action)
+        
+        self.tray_stop_action = QAction("Stop", self)
+        self.tray_stop_action.triggered.connect(self.stop)
+        self.tray_menu.addAction(self.tray_stop_action)
+        
+        self.tray_menu.addSeparator()
+        
+        # Queue status
+        self.tray_queue_action = QAction("Queue: Empty", self)
+        self.tray_queue_action.setEnabled(False)  # Just for display
+        self.tray_menu.addAction(self.tray_queue_action)
+        
+        self.tray_menu.addSeparator()
+        
+        # Theme switching submenu
+        self.tray_theme_menu = QMenu("Switch Theme", self)
+        self.create_tray_theme_menu()
+        self.tray_menu.addMenu(self.tray_theme_menu)
+        
+        self.tray_menu.addSeparator()
+        
+        # Window controls
+        self.tray_show_hide_action = QAction("Show Main Window", self)
+        self.tray_show_hide_action.triggered.connect(self.toggle_main_window)
+        self.tray_menu.addAction(self.tray_show_hide_action)
+        
+        self.tray_mini_player_action = QAction("Show Mini Player", self)
+        self.tray_mini_player_action.triggered.connect(self.toggle_mini_player)
+        self.tray_menu.addAction(self.tray_mini_player_action)
+        
+        self.tray_menu.addSeparator()
+        
+        # Quit
+        self.tray_quit_action = QAction("Quit Pyper", self)
+        self.tray_quit_action.triggered.connect(self.force_quit)
+        self.tray_menu.addAction(self.tray_quit_action)
+        
+        # Set the menu
+        self.tray_icon.setContextMenu(self.tray_menu)
+    
+    def create_tray_theme_menu(self):
+        """Create the theme switching submenu for tray"""
+        self.tray_theme_menu.clear()
+        
+        # Create theme action group for exclusivity
+        self.tray_theme_group = QActionGroup(self)
+        
+        for theme_id, theme_data in self.theme_manager.available_themes.items():
+            action = QAction(theme_data['name'], self)
+            action.setCheckable(True)
+            action.setData(theme_id)
+            action.triggered.connect(lambda checked, tid=theme_id: self.change_theme(tid))
+            
+            # Check current theme
+            if theme_id == self.theme_manager.current_theme:
+                action.setChecked(True)
+            
+            self.tray_theme_group.addAction(action)
+            self.tray_theme_menu.addAction(action)
+    
+    def tray_icon_activated(self, reason):
+        """Handle tray icon activation"""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.toggle_main_window()
+        elif reason == QSystemTrayIcon.ActivationReason.MiddleClick:
+            self.play_pause()
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            # Single click - show hover widget
+            self.show_tray_hover()
+    
+    def show_tray_hover(self):
+        """Show the tray hover widget"""
+        # Update hover widget with current state
+        if self.current_playing_index >= 0 and self.current_playing_index < len(self.current_queue):
+            current_song = self.current_queue[self.current_playing_index]
+            self.tray_hover_widget.update_track_info(current_song)
+        else:
+            self.tray_hover_widget.update_track_info(None)
+            
+        # Update artwork
+        self.tray_hover_widget.update_artwork(self.current_artwork_pixmap)
+        
+        # Update play button state
+        is_playing = self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        self.tray_hover_widget.update_play_button(is_playing)
+        
+        # Show at tray position (geometry may not be reliable on all systems)
+        try:
+            tray_geometry = self.tray_icon.geometry()
+            self.tray_hover_widget.show_at_tray(tray_geometry)
+        except:
+            # Fallback to default positioning if tray geometry fails
+            self.tray_hover_widget.show_at_tray()
+    
+    def toggle_main_window(self):
+        """Toggle main window visibility"""
+        if self.isVisible() and not self.isMinimized():
+            self.hide()
+            self.tray_show_hide_action.setText("Show Main Window")
+        else:
+            self.show()
+            self.raise_()
+            self.activateWindow()
+            self.tray_show_hide_action.setText("Hide Main Window")
+    
+    def update_tray_status(self):
+        """Update tray icon tooltip and menu with current status"""
+        if not hasattr(self, 'tray_icon'):
+            return
+            
+        # Update tooltip with more detailed info
+        if self.current_playing_index >= 0 and self.current_queue:
+            current_song = self.current_queue[self.current_playing_index]
+            title = current_song.get('title', 'Unknown')
+            artist = current_song.get('artist', 'Unknown Artist')
+            album = current_song.get('album', '')
+            
+            # Create rich tooltip
+            if album:
+                tooltip = f"Pyper Music Player\n♪ {title}\n🎤 {artist}\n💿 {album}\n\nClick for controls"
+            else:
+                tooltip = f"Pyper Music Player\n♪ {title}\n🎤 {artist}\n\nClick for controls"
+            self.tray_icon.setToolTip(tooltip)
+            
+            # Update play/pause action text
+            if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+                self.tray_play_pause_action.setText("Pause")
+            else:
+                self.tray_play_pause_action.setText("Play")
+        else:
+            self.tray_icon.setToolTip("Pyper Music Player\nNot playing\n\nClick for controls")
+            self.tray_play_pause_action.setText("Play")
+        
+        # Update queue status
+        if self.current_queue:
+            queue_text = f"Queue: {len(self.current_queue)} tracks"
+            if self.current_playing_index >= 0:
+                queue_text += f" (Playing #{self.current_playing_index + 1})"
+        else:
+            queue_text = "Queue: Empty"
+        self.tray_queue_action.setText(queue_text)
+        
+        # Update hover widget if it's visible
+        if hasattr(self, 'tray_hover_widget') and self.tray_hover_widget.isVisible():
+            if self.current_playing_index >= 0 and self.current_queue:
+                current_song = self.current_queue[self.current_playing_index]
+                self.tray_hover_widget.update_track_info(current_song)
+            else:
+                self.tray_hover_widget.update_track_info(None)
+            
+            self.tray_hover_widget.update_artwork(self.current_artwork_pixmap)
+            is_playing = self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+            self.tray_hover_widget.update_play_button(is_playing)
         
     def connect_to_navidrome(self):
         """Connect to the Navidrome server"""
@@ -1527,8 +1806,21 @@ class PyperMainWindow(QMainWindow):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data and 'title' in data:
             queue_start_index = len(self.current_queue)
-            self.add_songs_to_queue([data])
-            self.play_track(queue_start_index)
+            
+            # Get all songs from the current album starting from the clicked song
+            songs_to_queue = self.get_album_songs_from_track(data)
+            
+            if songs_to_queue:
+                self.add_songs_to_queue(songs_to_queue)
+                self.play_track(queue_start_index)
+                # Update status to reflect auto-queueing behavior
+                album_name = data.get('album', 'Unknown Album')
+                track_count = len(songs_to_queue)
+                self.status_label.setText(f"Playing '{data['title']}' - Queued {track_count} tracks from '{album_name}'")
+            else:
+                # Fallback to just adding the single song if we can't get album songs
+                self.add_songs_to_queue([data])
+                self.play_track(queue_start_index)
     
     def show_songs_context_menu(self, position):
         """Show context menu for songs in the fourth pane"""
@@ -1550,6 +1842,40 @@ class PyperMainWindow(QMainWindow):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data and 'title' in data:
             self.add_songs_to_queue([data])
+    
+    def get_album_songs_from_track(self, clicked_song_data):
+        """Get all songs from the album starting from the clicked track"""
+        try:
+            # Get the album ID from the clicked song
+            album_id = clicked_song_data.get('albumId')
+            if not album_id:
+                return None
+            
+            # Fetch all songs from the album
+            album_songs = self.sonic_client.getAlbum(album_id)
+            all_songs = album_songs.get('subsonic-response', {}).get('album', {}).get('song', [])
+            
+            if not all_songs:
+                return None
+            
+            # Sort songs by track number to ensure correct order
+            all_songs.sort(key=lambda x: int(x.get('track', 0)))
+            
+            # Find the index of the clicked song
+            clicked_song_id = clicked_song_data.get('id')
+            start_index = 0
+            
+            for i, song in enumerate(all_songs):
+                if song.get('id') == clicked_song_id:
+                    start_index = i
+                    break
+            
+            # Return all songs from the clicked track onwards
+            return all_songs[start_index:]
+            
+        except Exception as e:
+            logger.error(f"Error getting album songs from track: {e}")
+            return None
     
     def subitem_double_clicked(self, item):
         """Handle double-click on subitem - add to queue and play"""
@@ -1679,6 +2005,9 @@ class PyperMainWindow(QMainWindow):
             self.queue_list.addItem(song_title)
         
         self.status_label.setText(f"Added {len(songs)} song(s) to queue")
+        
+        # Update tray status when queue changes
+        self.update_tray_status()
     
     def queue_item_double_clicked(self, item):
         """Handle double-click on queue item (start playback)"""
@@ -1691,6 +2020,9 @@ class PyperMainWindow(QMainWindow):
         self.queue_list.clear()
         self.current_playing_index = -1
         self.status_label.setText("Queue cleared")
+        
+        # Update tray status when queue is cleared
+        self.update_tray_status()
     
     def show_queue_context_menu(self, position):
         """Show context menu for queue items"""
@@ -1754,6 +2086,72 @@ class PyperMainWindow(QMainWindow):
         else:
             QMessageBox.information(self, "Now Playing", "No track currently playing")
     
+    def setup_mini_player_connections(self):
+        """Setup connections between mini player and main window"""
+        self.mini_player.play_pause_clicked.connect(self.play_pause)
+        self.mini_player.previous_clicked.connect(self.previous_track)
+        self.mini_player.next_clicked.connect(self.next_track)
+        self.mini_player.stop_clicked.connect(self.stop)
+        self.mini_player.expand_clicked.connect(self.expand_from_mini_player)
+        self.mini_player.progress_clicked.connect(self.mini_player_progress_clicked)
+        
+    def setup_tray_hover_connections(self):
+        """Setup connections between tray hover widget and main window"""
+        self.tray_hover_widget.play_pause_clicked.connect(self.play_pause)
+        self.tray_hover_widget.previous_clicked.connect(self.previous_track)
+        self.tray_hover_widget.next_clicked.connect(self.next_track)
+        
+    def toggle_mini_player(self):
+        """Toggle mini player visibility"""
+        if self.mini_player.isVisible():
+            self.mini_player.hide()
+            self.show()  # Show main window when mini player is hidden
+        else:
+            # Update mini player with current state before showing
+            self.update_mini_player()
+            self.mini_player.show()
+            self.hide()  # Hide main window when mini player is shown
+            
+    def expand_from_mini_player(self):
+        """Expand from mini player to full interface"""
+        self.mini_player.hide()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        
+    def mini_player_progress_clicked(self, percentage):
+        """Handle progress bar click in mini player"""
+        if self.media_player.duration() > 0:
+            new_position = int((percentage / 100) * self.media_player.duration())
+            self.media_player.setPosition(new_position)
+            logger.info(f"Mini player scrubbed to position: {self.format_duration(new_position // 1000)}")
+            
+    def update_mini_player(self):
+        """Update mini player with current state"""
+        # Update track info
+        if self.current_playing_index >= 0 and self.current_playing_index < len(self.current_queue):
+            current_song = self.current_queue[self.current_playing_index]
+            self.mini_player.update_track_info(current_song)
+        else:
+            self.mini_player.update_track_info(None)
+            
+        # Update artwork
+        self.mini_player.update_artwork(self.current_artwork_pixmap)
+        
+        # Update play button state
+        is_playing = self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        self.mini_player.update_play_button(is_playing)
+        
+        # Update progress
+        position = self.media_player.position()
+        duration = self.media_player.duration()
+        self.mini_player.update_progress(position, duration)
+        
+    def force_quit(self):
+        """Force quit the application"""
+        from PyQt6.QtWidgets import QApplication
+        QApplication.instance().quit()
+    
     def play_track(self, index):
         """Play a specific track from the queue"""
         if 0 <= index < len(self.current_queue):
@@ -1786,6 +2184,12 @@ class PyperMainWindow(QMainWindow):
                 if self.now_playing_dialog.isVisible():
                     self.now_playing_dialog.update_track_info(song, self.current_artwork_pixmap)
                     
+                # Update mini player
+                self.update_mini_player()
+                
+                # Update tray status
+                self.update_tray_status()
+                    
                 # Scrobble to Navidrome
                 self.scrobble_track(song['id'])
                 
@@ -1804,6 +2208,12 @@ class PyperMainWindow(QMainWindow):
                 self.play_pause_button.setText("Pause")
             elif self.current_queue:
                 self.play_track(0)
+        
+        # Update mini player
+        self.update_mini_player()
+        
+        # Update tray status
+        self.update_tray_status()
     
     def stop(self):
         """Stop playback"""
@@ -1814,6 +2224,12 @@ class PyperMainWindow(QMainWindow):
         self.media_player.stop()
         self.play_pause_button.setText("Play")
         self.now_playing_label.setText("Stopped")
+        
+        # Update mini player
+        self.update_mini_player()
+        
+        # Update tray status
+        self.update_tray_status()
     
     def previous_track(self):
         """Play previous track"""
@@ -1834,6 +2250,9 @@ class PyperMainWindow(QMainWindow):
             current_time = self.format_duration(position // 1000)
             total_time = self.format_duration(self.media_player.duration() // 1000)
             self.time_label.setText(f"{current_time} / {total_time}")
+            
+            # Update mini player progress
+            self.mini_player.update_progress(position, self.media_player.duration())
     
     def duration_changed(self, duration):
         """Handle duration changes"""
@@ -1865,6 +2284,9 @@ class PyperMainWindow(QMainWindow):
         self.artwork_label.setPixmap(scaled_pixmap)
         self.artwork_label.setText("")
         self.current_artwork_pixmap = pixmap  # Store original for other uses
+        
+        # Update mini player artwork
+        self.mini_player.update_artwork(pixmap)
     
     def scrobble_track(self, song_id):
         """Scrobble track to Navidrome"""
@@ -2299,6 +2721,200 @@ class PyperMainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error navigating to browse item: {e}")
             self.status_label.setText("Failed to navigate to item")
+
+class TrayHoverWidget(QWidget):
+    """Compact hover widget that appears when hovering over tray icon"""
+    
+    # Signals for playback control
+    play_pause_clicked = pyqtSignal()
+    previous_clicked = pyqtSignal()
+    next_clicked = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Use Popup window type for better Wayland compatibility
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setFixedSize(280, 100)
+        
+        # Set parent for Wayland transient popup support
+        if parent:
+            self.setParent(parent, Qt.WindowType.Popup)
+            
+        self.setup_ui()
+        self.apply_default_style()
+        
+        # Auto-hide timer
+        self.hide_timer = QTimer()
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.hide)
+        
+    def setup_ui(self):
+        """Setup the hover widget UI"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+        
+        # Artwork
+        self.artwork_label = QLabel()
+        self.artwork_label.setFixedSize(64, 64)
+        self.artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.artwork_label.setText("♪")
+        self.artwork_label.setStyleSheet("""
+            QLabel {
+                border: 1px solid #666;
+                background-color: #333;
+                color: #fff;
+                font-size: 20px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+        """)
+        layout.addWidget(self.artwork_label)
+        
+        # Track info and controls
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Track info
+        self.track_label = QLabel("Not playing")
+        self.track_label.setStyleSheet("""
+            QLabel {
+                font-weight: bold; 
+                font-size: 12px; 
+                color: #fff;
+                background: none;
+                border: none;
+                padding: 2px;
+                margin: 0px;
+            }
+        """)
+        self.track_label.setWordWrap(True)
+        info_layout.addWidget(self.track_label)
+        
+        # Controls
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(4)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.prev_button = QPushButton("⏮")
+        self.play_pause_button = QPushButton("▶")
+        self.next_button = QPushButton("⏭")
+        
+        button_style = """
+            QPushButton {
+                font-size: 14px;
+                min-width: 28px;
+                max-width: 28px;
+                min-height: 24px;
+                max-height: 24px;
+                border: 1px solid #666;
+                border-radius: 3px;
+                background-color: #444;
+                color: #fff;
+            }
+            QPushButton:hover {
+                background-color: #555;
+                border: 1px solid #8b5cf6;
+            }
+            QPushButton:pressed {
+                background-color: #333;
+            }
+        """
+        
+        for btn in [self.prev_button, self.play_pause_button, self.next_button]:
+            btn.setStyleSheet(button_style)
+            controls_layout.addWidget(btn)
+        
+        # Connect signals
+        self.prev_button.clicked.connect(self.previous_clicked.emit)
+        self.play_pause_button.clicked.connect(self.play_pause_clicked.emit)
+        self.next_button.clicked.connect(self.next_clicked.emit)
+        
+        controls_layout.addStretch()
+        info_layout.addLayout(controls_layout)
+        layout.addLayout(info_layout)
+        
+    def apply_default_style(self):
+        """Apply default dark theme"""
+        self.setStyleSheet("""
+            TrayHoverWidget {
+                background-color: #2b2b2b;
+                border: 1px solid #666;
+                border-radius: 6px;
+                padding: 4px;
+            }
+        """)
+        
+    def update_track_info(self, song_data):
+        """Update track information"""
+        if song_data:
+            title = song_data.get('title', 'Unknown')
+            artist = song_data.get('artist', 'Unknown Artist')
+            self.track_label.setText(f"{title}\n{artist}")
+        else:
+            self.track_label.setText("Not playing")
+            
+    def update_artwork(self, pixmap):
+        """Update artwork"""
+        if pixmap and not pixmap.isNull():
+            scaled_pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.artwork_label.setPixmap(scaled_pixmap)
+            self.artwork_label.setText("")
+        else:
+            self.artwork_label.clear()
+            self.artwork_label.setText("♪")
+            
+    def update_play_button(self, is_playing):
+        """Update play/pause button"""
+        if is_playing:
+            self.play_pause_button.setText("⏸")
+        else:
+            self.play_pause_button.setText("▶")
+            
+    def show_at_tray(self, tray_geometry=None):
+        """Show the widget near the system tray"""
+        screen = QApplication.primaryScreen().geometry()
+        widget_width = self.width()
+        widget_height = self.height()
+        
+        # Default positioning for bottom-right tray (most common)
+        # Position in bottom-right corner with some margin
+        x = screen.width() - widget_width - 20
+        y = screen.height() - widget_height - 60  # Account for taskbar/panel
+        
+        # If we have tray geometry info, try to use it
+        if tray_geometry and tray_geometry.isValid():
+            # Position relative to tray icon
+            if tray_geometry.y() > screen.height() / 2:
+                # Tray at bottom, show above
+                x = max(10, min(tray_geometry.x() - widget_width // 2, screen.width() - widget_width - 10))
+                y = tray_geometry.y() - widget_height - 10
+            else:
+                # Tray at top, show below
+                x = max(10, min(tray_geometry.x() - widget_width // 2, screen.width() - widget_width - 10))
+                y = tray_geometry.y() + tray_geometry.height() + 10
+        
+        # Ensure we stay within screen bounds
+        x = max(10, min(x, screen.width() - widget_width - 10))
+        y = max(10, min(y, screen.height() - widget_height - 10))
+        
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        
+        # Auto-hide after 3 seconds
+        self.hide_timer.start(3000)
+        
+    def enterEvent(self, event):
+        """Keep widget visible when mouse enters"""
+        self.hide_timer.stop()
+        
+    def leaveEvent(self, event):
+        """Start hide timer when mouse leaves"""
+        self.hide_timer.start(1000)  # Hide after 1 second
+
 
 def main():
     """Main application entry point"""

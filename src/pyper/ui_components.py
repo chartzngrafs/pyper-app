@@ -5,7 +5,7 @@ Contains custom UI widgets and dialogs
 
 import logging
 from PyQt6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QPushButton, QTextEdit, QScrollArea, QGridLayout)
+                            QPushButton, QTextEdit, QScrollArea, QGridLayout, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap, QFont
 
@@ -72,6 +72,317 @@ class NowPlayingDialog(QDialog):
         <b>Duration:</b> {duration_str}
         """
         self.info_text.setHtml(info_html)
+
+
+class MiniPlayerDialog(QDialog):
+    """Compact mini player window for multitasking"""
+    
+    # Signals for communication with main window
+    play_pause_clicked = pyqtSignal()
+    previous_clicked = pyqtSignal()
+    next_clicked = pyqtSignal()
+    stop_clicked = pyqtSignal()
+    expand_clicked = pyqtSignal()
+    progress_clicked = pyqtSignal(int)  # Position percentage
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.setup_ui()
+        self.apply_default_theme()
+        
+        # Removed always-on-top functionality - replaced with system tray icon
+        
+    def setup_ui(self):
+        """Setup the mini player UI"""
+        self.setWindowTitle("Pyper - Mini Player")
+        self.setMinimumSize(350, 120)
+        self.resize(350, 120)
+        
+        # Make window resizable and draggable
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.WindowMinimizeButtonHint)
+        
+        # Main layout
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(12)
+        
+        # Album artwork (compact size)
+        self.artwork_label = QLabel()
+        self.artwork_label.setFixedSize(80, 80)
+        self.artwork_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.artwork_label.setScaledContents(True)
+        self.artwork_label.setText("♪")
+        self.artwork_label.setStyleSheet("""
+            QLabel {
+                border: 1px solid #666;
+                background-color: #333;
+                color: #fff;
+                font-size: 18px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+        """)
+        main_layout.addWidget(self.artwork_label)
+        
+        # Controls and info section
+        controls_section = QWidget()
+        controls_layout = QVBoxLayout(controls_section)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(4)
+        
+        # Track info
+        self.track_info_label = QLabel("Not playing")
+        self.track_info_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #fff;")
+        self.track_info_label.setWordWrap(True)
+        controls_layout.addWidget(self.track_info_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setMaximumHeight(8)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #666;
+                border-radius: 3px;
+                background-color: #444;
+            }
+            QProgressBar::chunk {
+                background-color: #8b5cf6;
+                border-radius: 3px;
+            }
+        """)
+        # Enable progress bar clicking for time scrubbing
+        self.progress_bar.mousePressEvent = self.progress_bar_clicked
+        controls_layout.addWidget(self.progress_bar)
+        
+        # Control buttons row
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(4)
+        
+        # Playback buttons (compact)
+        self.prev_button = QPushButton("⏮")
+        self.play_pause_button = QPushButton("▶")
+        self.stop_button = QPushButton("⏹")
+        self.next_button = QPushButton("⏭")
+        
+        # Style buttons
+        button_style = """
+            QPushButton {
+                font-size: 12px;
+                min-width: 25px;
+                max-width: 25px;
+                min-height: 25px;
+                max-height: 25px;
+                border: 1px solid #666;
+                border-radius: 3px;
+                background-color: #444;
+                color: #fff;
+            }
+            QPushButton:hover {
+                background-color: #555;
+                border: 1px solid #888;
+            }
+            QPushButton:pressed {
+                background-color: #333;
+            }
+        """
+        
+        for btn in [self.prev_button, self.play_pause_button, self.stop_button, self.next_button]:
+            btn.setStyleSheet(button_style)
+        
+        # Connect button signals
+        self.prev_button.clicked.connect(self.previous_clicked.emit)
+        self.play_pause_button.clicked.connect(self.play_pause_clicked.emit)
+        self.stop_button.clicked.connect(self.stop_clicked.emit)
+        self.next_button.clicked.connect(self.next_clicked.emit)
+        
+        buttons_layout.addWidget(self.prev_button)
+        buttons_layout.addWidget(self.play_pause_button)
+        buttons_layout.addWidget(self.stop_button)
+        buttons_layout.addWidget(self.next_button)
+        buttons_layout.addStretch()
+        
+        controls_layout.addLayout(buttons_layout)
+        main_layout.addWidget(controls_section)
+        
+        # Right side buttons
+        right_buttons_layout = QVBoxLayout()
+        right_buttons_layout.setSpacing(4)
+        
+        # Expand to full window button (removed always-on-top in favor of tray icon)
+        self.expand_button = QPushButton("⤢")
+        self.expand_button.setToolTip("Expand to Full Player")
+        self.expand_button.clicked.connect(self.expand_clicked.emit)
+        self.expand_button.setStyleSheet(button_style)
+        
+        right_buttons_layout.addWidget(self.expand_button)
+        right_buttons_layout.addStretch()
+        
+        main_layout.addLayout(right_buttons_layout)
+        
+    def apply_default_theme(self):
+        """Apply default dark theme to mini player"""
+        self.setStyleSheet("""
+            MiniPlayerDialog {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+            QWidget {
+                background-color: #2b2b2b;
+                color: #ffffff;
+            }
+        """)
+        
+    def apply_theme_colors(self, theme_colors):
+        """Apply theme colors to the mini player"""
+        background = theme_colors.get('background', '#2b2b2b')
+        text = theme_colors.get('text', '#ffffff')
+        surface = theme_colors.get('surface', '#424242')
+        border = theme_colors.get('border', '#666666')
+        primary = theme_colors.get('primary', '#8b5cf6')
+        hover = theme_colors.get('hover', '#555555')
+        
+        self.setStyleSheet(f"""
+            MiniPlayerDialog {{
+                background-color: {background};
+                color: {text};
+            }}
+            QWidget {{
+                background-color: {background};
+                color: {text};
+            }}
+        """)
+        
+        # Update artwork label
+        self.artwork_label.setStyleSheet(f"""
+            QLabel {{
+                border: 1px solid {border};
+                background-color: {surface};
+                color: {text};
+                font-size: 18px;
+                font-weight: bold;
+                border-radius: 4px;
+            }}
+        """)
+        
+        # Update track info
+        self.track_info_label.setStyleSheet(f"font-weight: bold; font-size: 12px; color: {text};")
+        
+        # Update progress bar
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {border};
+                border-radius: 3px;
+                background-color: {surface};
+            }}
+            QProgressBar::chunk {{
+                background-color: {primary};
+                border-radius: 3px;
+            }}
+        """)
+        
+        # Update buttons
+        button_style = f"""
+            QPushButton {{
+                font-size: 12px;
+                min-width: 25px;
+                max-width: 25px;
+                min-height: 25px;
+                max-height: 25px;
+                border: 1px solid {border};
+                border-radius: 3px;
+                background-color: {surface};
+                color: {text};
+            }}
+            QPushButton:hover {{
+                background-color: {hover};
+                border: 1px solid {primary};
+            }}
+            QPushButton:pressed {{
+                background-color: {border};
+            }}
+        """
+        
+        for btn in [self.prev_button, self.play_pause_button, self.stop_button, self.next_button, self.expand_button]:
+            btn.setStyleSheet(button_style)
+        
+    # Always-on-top functionality removed - replaced with system tray icon
+        
+    def progress_bar_clicked(self, event):
+        """Handle progress bar click for time scrubbing"""
+        if self.progress_bar.maximum() > 0:
+            # Calculate percentage based on click position
+            click_x = event.position().x()
+            width = self.progress_bar.width()
+            percentage = int((click_x / width) * 100)
+            percentage = max(0, min(100, percentage))  # Clamp between 0-100
+            self.progress_clicked.emit(percentage)
+            
+    def update_track_info(self, song_data):
+        """Update the mini player with current track information"""
+        if song_data:
+            title = song_data.get('title', 'Unknown')
+            artist = song_data.get('artist', 'Unknown Artist')
+            self.track_info_label.setText(f"{title}\n{artist}")
+        else:
+            self.track_info_label.setText("Not playing")
+            
+    def update_artwork(self, pixmap):
+        """Update the artwork display"""
+        if pixmap and not pixmap.isNull():
+            scaled_pixmap = pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.artwork_label.setPixmap(scaled_pixmap)
+            self.artwork_label.setText("")
+        else:
+            self.artwork_label.clear()
+            self.artwork_label.setText("♪")
+            
+    def update_play_button(self, is_playing):
+        """Update play/pause button state"""
+        if is_playing:
+            self.play_pause_button.setText("⏸")
+        else:
+            self.play_pause_button.setText("▶")
+            
+    def update_progress(self, position, duration):
+        """Update progress bar"""
+        if duration > 0:
+            percentage = int((position / duration) * 100)
+            self.progress_bar.setValue(percentage)
+        else:
+            self.progress_bar.setValue(0)
+            
+    def closeEvent(self, event):
+        """Handle mini player close event"""
+        # Check if main window is closing to avoid interference
+        if (self.parent_window and 
+            hasattr(self.parent_window, '_is_closing') and 
+            self.parent_window._is_closing):
+            event.accept()
+            return
+            
+        # Check if application is quitting to avoid interference
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance()
+        
+        # If application is quitting, don't interfere
+        if app and app.closingDown():
+            event.accept()
+            return
+            
+        # Otherwise, show main window if it's hidden
+        if (self.parent_window and 
+            hasattr(self.parent_window, 'isVisible') and 
+            not self.parent_window.isVisible()):
+            try:
+                self.parent_window.show()
+                self.parent_window.raise_()
+                self.parent_window.activateWindow()
+            except:
+                pass  # Ignore errors during close
+        
+        event.accept()
 
 
 class ContextualInfoPanel(QWidget):

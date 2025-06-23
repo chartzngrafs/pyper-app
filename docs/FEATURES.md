@@ -51,6 +51,7 @@ Pyper follows a clean, modular architecture with separation of concerns across f
 - **Gapless Playback**: Smooth transitions between tracks
 - **ReplayGain Support**: Automatic volume normalization when available in metadata
 - **Scrobbling**: Last.fm compatible scrobbling through Navidrome integration
+- **Smart Album Queueing**: Double-click any song to automatically queue the remainder of that album from that track onward
 
 ### Player Controls
 - **Standard Controls**: Play, Pause, Stop, Previous, Next
@@ -59,6 +60,15 @@ Pyper follows a clean, modular architecture with separation of concerns across f
 - **Time Display**: Current time and total duration
 - **Album Artwork**: Clickable artwork that opens detailed track information
 - **Now Playing Display**: Current track title and artist information with theme-specific colors
+
+### Mini Player Mode
+- **Compact Player Window**: 350x120px resizable mini player for multitasking
+- **Complete Playback Controls**: Previous, play/pause, stop, next buttons
+- **Interactive Progress Bar**: Click-to-scrub functionality in compact format
+- **Album Artwork Display**: 80x80px artwork with theme-consistent styling
+- **Expand to Full Player**: One-click button to return to main interface
+- **Theme Integration**: Automatically matches current application theme
+- **Window Management**: Draggable positioning and proper window lifecycle
 
 ## 🗂️ Navigation & Browsing
 
@@ -396,7 +406,63 @@ The "Go to..." context menu options provide seamless navigation between tabs:
 - **Desktop Entry**: Linux desktop integration with `.desktop` file
 - **Icon Support**: Custom application icon
 - **File Associations**: Potential for music file associations
-- **System Tray**: Future system tray integration support
+- **Comprehensive System Tray**: Full-featured system tray integration with contextual menu and hover controls
+
+## 🖥️ System Tray Integration
+
+### System Tray Icon
+- **Native Integration**: Proper system tray icon with application branding
+- **Dynamic Tooltip**: Rich multi-line tooltips showing current track information
+- **Visual Feedback**: Icon presence indicates application is running
+- **Cross-Desktop Support**: Compatible with GNOME, KDE, XFCE, and other desktop environments
+
+### Tray Contextual Menu
+- **Complete Playback Controls**:
+  - Play/Pause with dynamic state indication
+  - Previous Track, Next Track, Stop
+  - Real-time play state updates
+- **Queue Management**:
+  - Queue status display ("Queue: X tracks (Playing #Y)")
+  - Current queue size and position tracking
+  - Dynamic updates as queue changes
+- **Theme Switching**:
+  - Complete theme submenu with all 8 available themes
+  - Instant theme switching without opening main window
+  - Visual theme name display (Synthwave '84, Dark Teal, etc.)
+- **Window Management**:
+  - Show/Hide Main Window toggle
+  - Show Mini Player option
+  - Window state persistence
+
+### Interactive Tray Controls
+- **Click Actions**:
+  - **Single Click**: Show dynamic hover popup with controls
+  - **Double Click**: Toggle main window visibility
+  - **Middle Click**: Play/pause toggle (Linux standard)
+- **Hover Popup Player**:
+  - 280x100px compact control popup
+  - Album artwork (64x64px) with current track
+  - Track information (title and artist)
+  - Playback controls (previous, play/pause, next)
+  - Auto-hide after 3 seconds or 1 second after mouse leaves
+  - Smart positioning near system tray
+
+### Advanced Tray Features
+- **Rich Tooltips**: Multi-line tooltips showing:
+  - Application name and status
+  - Current track title (♪ symbol)
+  - Artist name (🎤 symbol)
+  - Album name (💿 symbol)
+  - "Click for controls" instruction
+- **Real-Time Updates**: All tray elements update automatically:
+  - Play/pause state changes
+  - Track information updates
+  - Queue status modifications
+  - Theme changes reflected immediately
+- **Wayland Compatibility**: 
+  - Proper popup window management for Wayland
+  - Smart positioning with screen bounds checking
+  - Fallback positioning for different desktop environments
 
 ### Development Features
 - **Modular Architecture**: Clean separation of concerns

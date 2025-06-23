@@ -2,7 +2,20 @@
 
 This document outlines upcoming features planned for Pyper, focusing on deep Linux desktop integration and enhanced music discovery capabilities.
 
-## 🐧 Deep Linux Desktop Integration
+## ✅ Recently Implemented Features
+
+The following features have been successfully implemented and are now available in Pyper:
+
+### Desktop Integration (Completed)
+- ✅ **System Tray Integration**: Full-featured tray icon with contextual menu and hover controls
+- ✅ **Mini Player Mode**: Compact 350x120px player with complete controls and theme integration
+- ✅ **Smart Album Queueing**: Double-click songs to auto-queue remainder of album from that track onward
+- ✅ **Tray Contextual Menu**: Complete playback controls, queue management, and theme switching
+- ✅ **Dynamic Hover Player**: Click tray for instant 280x100px popup with controls and track info
+- ✅ **Rich Tooltips**: Multi-line tooltips with track information and visual symbols
+- ✅ **Wayland Compatibility**: Proper popup positioning and window management
+
+## 🐧 Deep Linux Desktop Integration (Remaining)
 
 ### MPRIS2 Protocol Support
 - **Full MPRIS2 D-Bus Implementation**: Complete media control protocol support for Linux desktop environments
@@ -10,13 +23,7 @@ This document outlines upcoming features planned for Pyper, focusing on deep Lin
 - **Lock Screen Integration**: Playback controls and track information on KDE/GNOME lock screens
 - **Metadata Broadcasting**: Real-time artist, album, track, and artwork information to desktop services
 
-### Enhanced Desktop Experience
-- **Tray Icon with Contextual Menu**: 
-  - Quick play/pause/skip controls
-  - Recently played albums shortcut
-  - Queue status and management
-  - Theme switching without opening main window
-  - "Show/Hide Main Window" toggle
+### Enhanced Desktop Experience (Remaining)
 - **Global Hotkeys System**:
   - Standard media key support (Play/Pause, Next, Previous, Volume)
   - Custom keyboard shortcuts (Ctrl+Alt+P for play/pause, etc.)
@@ -27,15 +34,6 @@ This document outlines upcoming features planned for Pyper, focusing on deep Lin
   - Theme-aware notification styling matching current Pyper theme
   - Clickable notifications for quick player access
   - Configurable notification timing and display options
-
-### Mini Player Mode
-- **Compact Window with Always-On-Top Toggle**:
-  - Minimal footprint player for multitasking
-  - Album art, basic controls, and track info
-  - Resizable and draggable positioning
-  - Always-on-top toggle button for flexible window management
-  - One-click expansion to full interface
-  - Theme consistency with main application
 
 ## 🎵 Music Discovery Engine
 
@@ -57,8 +55,6 @@ This document outlines upcoming features planned for Pyper, focusing on deep Lin
   - Genre-crossing mood playlists ("Chill Electronic + Ambient Rock")
   - Time-based suggestions ("Morning Energizers", "Late Night Vibes")
   - Weather-aware recommendations using system location data
-
-
 
 ## 📊 Visual Music Exploration
 - **Interactive Genre Map**:
@@ -89,25 +85,19 @@ This document outlines upcoming features planned for Pyper, focusing on deep Lin
 
 ## 🎯 Implementation Priority
 
-### Phase 1: Core Desktop Integration
+### Phase 1: Advanced Desktop Integration
 1. MPRIS2 protocol implementation
-2. Basic tray icon and notifications
-3. Global hotkeys system
-4. Mini player mode
+2. Global hotkeys system  
+3. Desktop notifications with album art
+4. KDE/GNOME lock screen integration
 
-### Phase 2: Advanced Desktop Features
-1. KDE/GNOME lock screen integration
-2. Enhanced tray contextual menu
-3. Theme-aware desktop notifications
-4. Desktop widget optimizations
-
-### Phase 3: Music Discovery Foundation
+### Phase 2: Music Discovery Foundation
 1. Basic recommendation engine
 2. Smart playlist creation system
 3. Smart suggestions panel
 4. Mood-based categorization
 
-### Phase 4: Advanced Discovery Features
+### Phase 3: Advanced Discovery Features
 1. Visual music exploration tools
 2. Interactive genre mapping
 3. Enhanced mood-based recommendations
@@ -130,4 +120,4 @@ This document outlines upcoming features planned for Pyper, focusing on deep Lin
 
 ---
 
-*This roadmap is subject to change based on user feedback and development priorities. Features will be implemented incrementally with thorough testing and documentation.* 
+*This roadmap reflects the current state after successful implementation of system tray integration, mini player mode, and smart album queueing. Features will continue to be implemented incrementally with thorough testing and documentation.* 
