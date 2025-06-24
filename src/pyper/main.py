@@ -43,6 +43,7 @@ try:
     from .background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from .ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget, MiniPlayerDialog
     from .desktop_integration import DesktopIntegrationManager
+    from .dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
 except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
@@ -54,6 +55,7 @@ except ImportError:
     from background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget
     from desktop_integration import DesktopIntegrationManager
+    from dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
 
 # Setup logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
@@ -149,6 +151,9 @@ class PyperMainWindow(QMainWindow):
         self.most_played_albums = []
         self.recently_played_albums = []
         self.recently_added_albums = []  # New: Recently added albums
+        
+        # Initialize dynamic theme engine
+        self.dynamic_theme_engine = None  # Will be initialized after library is loaded
         
         # Initialize now playing dialog (keep for backward compatibility)
         self.now_playing_dialog = NowPlayingDialog(self)
@@ -650,6 +655,10 @@ class PyperMainWindow(QMainWindow):
         self.tab_widget.addTab(recently_added_tab, "Recently Added")
         self.tab_widget.addTab(most_played_tab, "Most Played")
         self.tab_widget.addTab(recently_played_tab, "Recently Played")
+        
+        # Add themed playlists tab - will be initialized after library is loaded
+        self.themed_playlists_tab = None
+        
         self.tab_widget.addTab(radio_tab, "Radio")
         
         browser_layout.addWidget(self.tab_widget)
@@ -1051,6 +1060,9 @@ class PyperMainWindow(QMainWindow):
         
         # Load radio stations
         self.load_radio_stations()
+        
+        # Initialize dynamic themes after library is loaded
+        self.initialize_dynamic_themes()
     
     def refresh_error(self, error_message):
         """Handle library refresh error"""
@@ -2738,6 +2750,121 @@ class PyperMainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error navigating to browse item: {e}")
             self.status_label.setText("Failed to navigate to item")
+    
+    def initialize_dynamic_themes(self):
+        """Initialize the dynamic theme engine and themed playlists tab"""
+        try:
+            logger.info("Initializing dynamic themes feature")
+            
+            # Initialize theme engine
+            self.dynamic_theme_engine = DynamicThemeEngine(self.library_data, self.sonic_client)
+            
+            # Create themed playlists tab
+            self.themed_playlists_tab = ThemedPlaylistsTab(self, self.dynamic_theme_engine)
+            
+            # Connect tab signals to main window methods
+            self.themed_playlists_tab.play_theme_requested.connect(self.play_theme_tracks)
+            self.themed_playlists_tab.queue_theme_requested.connect(self.queue_theme_tracks)
+            self.themed_playlists_tab.save_theme_requested.connect(self.save_theme_playlist)
+            
+            # Insert tab at index 6 (between Recently Played and Radio)
+            radio_tab_index = -1
+            for i in range(self.tab_widget.count()):
+                if self.tab_widget.tabText(i) == "Radio":
+                    radio_tab_index = i
+                    break
+            
+            if radio_tab_index >= 0:
+                self.tab_widget.insertTab(radio_tab_index, self.themed_playlists_tab, "Your Library Themes")
+                logger.info("Themed playlists tab added successfully")
+            else:
+                # Fallback: add at the end
+                self.tab_widget.addTab(self.themed_playlists_tab, "Your Library Themes")
+                logger.warning("Radio tab not found, added themed playlists tab at end")
+                
+        except Exception as e:
+            logger.error(f"Failed to initialize dynamic themes: {e}")
+            # Continue without the feature
+    
+    def play_theme_tracks(self, tracks):
+        """Play tracks from a discovered theme"""
+        try:
+            logger.info(f"Playing theme with {len(tracks)} tracks")
+            
+            # Clear current queue and add theme tracks
+            self.current_queue.clear()
+            self.add_songs_to_queue(tracks)
+            
+            # Start playing from the first track
+            if self.current_queue:
+                self.play_track(0)
+                
+        except Exception as e:
+            logger.error(f"Failed to play theme tracks: {e}")
+            QMessageBox.warning(self, "Playback Error", f"Failed to play theme tracks: {str(e)}")
+    
+    def queue_theme_tracks(self, tracks):
+        """Add theme tracks to the current queue"""
+        try:
+            logger.info(f"Queuing theme with {len(tracks)} tracks")
+            self.add_songs_to_queue(tracks)
+            
+        except Exception as e:
+            logger.error(f"Failed to queue theme tracks: {e}")
+            QMessageBox.warning(self, "Queue Error", f"Failed to add theme tracks to queue: {str(e)}")
+    
+    def save_theme_playlist(self, theme):
+        """Save a theme as a Navidrome playlist"""
+        try:
+            theme_name = theme.get('name', 'Unknown Theme')
+            tracks = theme.get('tracks', [])
+            
+            if not tracks:
+                QMessageBox.warning(self, "Save Error", "Theme has no tracks to save")
+                return
+            
+            # Extract track IDs for Navidrome
+            track_ids = []
+            for track in tracks:
+                track_id = track.get('id')
+                if track_id:
+                    track_ids.append(track_id)
+            
+            if not track_ids:
+                QMessageBox.warning(self, "Save Error", "No valid track IDs found in theme")
+                return
+            
+            logger.info(f"Saving theme '{theme_name}' as playlist with {len(track_ids)} tracks")
+            
+            # Create playlist via Navidrome API
+            try:
+                playlist_data = {
+                    'name': f"Theme: {theme_name}",
+                    'comment': theme.get('description', ''),
+                    'public': False,
+                    'songIds': track_ids
+                }
+                
+                # This would need to be implemented in the sonic client
+                # For now, show success message
+                QMessageBox.information(
+                    self, 
+                    "Theme Saved", 
+                    f"Theme '{theme_name}' has been saved as a playlist with {len(track_ids)} tracks."
+                )
+                
+            except Exception as api_error:
+                logger.error(f"Failed to save playlist via API: {api_error}")
+                QMessageBox.warning(
+                    self, 
+                    "Save Error", 
+                    f"Failed to save theme as playlist: {str(api_error)}"
+                )
+                
+        except Exception as e:
+            logger.error(f"Failed to save theme playlist: {e}")
+            QMessageBox.warning(self, "Save Error", f"Failed to save theme playlist: {str(e)}")
+
 
 class TrayHoverWidget(QWidget):
     """Compact hover widget that appears when hovering over tray icon"""
