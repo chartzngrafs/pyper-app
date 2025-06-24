@@ -249,4 +249,73 @@ class NavidromeDBHelper:
         except Exception as e:
             print(f"Database query error: {e}")
             conn.close()
+            return []
+    
+    def get_all_tracks_for_themes(self, limit=None):
+        """Get all tracks with metadata for dynamic theme analysis"""
+        conn = self.get_connection()
+        if not conn:
+            return []
+        
+        try:
+            cursor = conn.cursor()
+            query = """
+                SELECT 
+                    mf.id,
+                    mf.title,
+                    mf.artist,
+                    mf.album,
+                    mf.album_artist,
+                    mf.genre,
+                    mf.year,
+                    mf.duration,
+                    mf.track_number,
+                    mf.disc_number,
+                    mf.path,
+                    mf.created_at,
+                    mf.updated_at,
+                    COALESCE(an.play_count, 0) as play_count,
+                    an.play_date as last_played,
+                    COALESCE(an.rating, 0) as rating
+                FROM media_file mf
+                LEFT JOIN annotation an ON mf.id = an.item_id AND an.item_type = 'media_file'
+                ORDER BY mf.artist, mf.album, mf.track_number
+            """
+            
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            cursor.execute(query)
+            
+            results = []
+            for row in cursor.fetchall():
+                (track_id, title, artist, album, album_artist, genre, year, 
+                 duration, track_number, disc_number, path, created_at, updated_at,
+                 play_count, last_played, rating) = row
+                
+                results.append({
+                    'id': track_id,
+                    'title': title,
+                    'artist': artist or album_artist,
+                    'album': album,
+                    'genre': genre,
+                    'year': year,
+                    'duration': duration,
+                    'trackNumber': track_number,
+                    'discNumber': disc_number,
+                    'path': path,
+                    'created': created_at,
+                    'updated': updated_at,
+                    'playCount': play_count or 0,
+                    'lastPlayed': last_played,
+                    'rating': rating or 0
+                })
+            
+            conn.close()
+            logger.info(f"Retrieved {len(results)} tracks for theme analysis")
+            return results
+            
+        except Exception as e:
+            logger.error(f"Database query error: {e}")
+            conn.close()
             return [] 

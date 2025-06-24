@@ -32,10 +32,11 @@ logger = logging.getLogger('DynamicThemes')
 class DynamicThemeEngine:
     """Main engine orchestrating theme discovery - Phase 1 MVP"""
     
-    def __init__(self, library_data: Dict[str, Any], sonic_client):
+    def __init__(self, library_data: Dict[str, Any], sonic_client, db_helper=None):
         self.library_data = library_data
         self.sonic_client = sonic_client
-        self.discovery_engine = BasicThemeDiscovery(library_data)
+        self.db_helper = db_helper
+        self.discovery_engine = BasicThemeDiscovery(library_data, db_helper)
         self.cache = ThemeCache()
         
         logger.info("Dynamic Theme Engine initialized (Phase 1 MVP)")
@@ -78,10 +79,20 @@ class DynamicThemeEngine:
             return []
     
     def get_all_library_tracks(self) -> List[Dict[str, Any]]:
-        """Extract all tracks from library data"""
+        """Extract all tracks from library data - preferring database over API"""
         all_tracks = []
         
-        # Get tracks from artists -> albums -> songs structure
+        # Try to get tracks from database first (more complete data)
+        if self.db_helper:
+            try:
+                all_tracks = self.db_helper.get_all_tracks_for_themes()
+                if all_tracks:
+                    logger.info(f"Extracted {len(all_tracks)} tracks from database")
+                    return all_tracks
+            except Exception as e:
+                logger.warning(f"Failed to get tracks from database: {e}")
+        
+        # Fallback to API-based library data
         artists = self.library_data.get('artists', [])
         for artist in artists:
             albums = artist.get('albums', [])
@@ -106,8 +117,9 @@ class DynamicThemeEngine:
 class BasicThemeDiscovery:
     """Phase 1 MVP implementation with basic clustering"""
     
-    def __init__(self, library_data: Dict[str, Any]):
+    def __init__(self, library_data: Dict[str, Any], db_helper=None):
         self.library_data = library_data
+        self.db_helper = db_helper
         self.scaler = StandardScaler()
         
     def discover_themes(self, tracks: List[Dict], n_themes: int = 15) -> List[Dict[str, Any]]:
@@ -129,7 +141,12 @@ class BasicThemeDiscovery:
         
         # Apply clustering
         try:
-            clusters = KMeans(n_clusters=min(n_themes, len(tracks)//5), random_state=42).fit_predict(features_normalized)
+            n_clusters = min(n_themes, max(2, len(tracks)//5))  # Ensure at least 2 clusters
+            if n_clusters > len(tracks):
+                n_clusters = max(1, len(tracks)//2)
+            
+            logger.info(f"Applying K-means clustering with {n_clusters} clusters for {len(tracks)} tracks")
+            clusters = KMeans(n_clusters=n_clusters, random_state=42).fit_predict(features_normalized)
         except Exception as e:
             logger.error(f"Clustering failed: {e}")
             return []
@@ -143,8 +160,9 @@ class BasicThemeDiscovery:
     def extract_basic_features(self, tracks: List[Dict]) -> Optional[np.ndarray]:
         """Extract basic features for MVP clustering"""
         features = []
+        expected_feature_length = 9  # 1 year + 6 genres + 1 play_count + 1 duration
         
-        for track in tracks:
+        for i, track in enumerate(tracks):
             try:
                 track_features = []
                 
@@ -167,14 +185,25 @@ class BasicThemeDiscovery:
                 duration_norm = min(duration / 600.0, 1.0) if duration else 0.5  # Cap at 10 minutes
                 track_features.append(duration_norm)
                 
+                # Validate feature vector length
+                if len(track_features) != expected_feature_length:
+                    logger.warning(f"Track {i}: Expected {expected_feature_length} features, got {len(track_features)}")
+                    track_features = [0.5] * expected_feature_length
+                
                 features.append(track_features)
                 
             except Exception as e:
-                logger.warning(f"Failed to extract features for track {track.get('title', 'Unknown')}: {e}")
+                logger.warning(f"Failed to extract features for track {i} '{track.get('title', 'Unknown')}': {e}")
                 # Add default features
-                features.append([0.5] * 8)  # Default feature vector
+                features.append([0.5] * expected_feature_length)
         
-        return np.array(features) if features else None
+        if not features:
+            logger.error("No features extracted from any tracks")
+            return None
+            
+        feature_array = np.array(features)
+        logger.info(f"Extracted features: {feature_array.shape} (tracks x features)")
+        return feature_array
     
     def extract_year(self, track: Dict) -> Optional[int]:
         """Extract year from track metadata"""
@@ -296,8 +325,11 @@ class BasicThemeDiscovery:
         
         # Extract info for naming
         decade = cluster_info.get('primary_decade', 'Mixed Era')
-        primary_genre = cluster_info.get('top_genres', ['Music'])[0].title()
-        primary_artist = cluster_info.get('top_artists', ['Various'])[0]
+        top_genres = cluster_info.get('top_genres', [])
+        top_artists = cluster_info.get('top_artists', [])
+        
+        primary_genre = top_genres[0].title() if top_genres else 'Music'
+        primary_artist = top_artists[0] if top_artists else 'Various'
         
         # Simple mood inference
         avg_duration = cluster_info.get('avg_duration', 0)

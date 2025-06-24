@@ -4,6 +4,7 @@ py-sonic>=1.0.0
 qt-material>=2.14
 dbus-python>=1.2.0
 PyGObject>=3.42.0
+requests>=2.25.1
 # Dynamic Themed Playlists dependencies
 scikit-learn>=1.0.0
 numpy>=1.21.0 

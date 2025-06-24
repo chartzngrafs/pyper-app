@@ -2783,7 +2783,7 @@ class PyperMainWindow(QMainWindow):
             
             # Initialize theme engine - this might fail if dependencies aren't properly loaded
             try:
-                self.dynamic_theme_engine = DynamicThemeEngine(self.library_data, self.sonic_client)
+                self.dynamic_theme_engine = DynamicThemeEngine(self.library_data, self.sonic_client, self.db_helper)
             except Exception as e:
                 logger.error(f"Failed to initialize theme engine: {e}")
                 logger.info("Dynamic themes feature disabled due to initialization error")
