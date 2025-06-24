@@ -269,12 +269,12 @@ class ThemeManager:
                 
                 # Apply theme colors to subitems container to maintain border
                 if hasattr(main_window, 'subitems_container'):
-                    surface_color = current_theme_data['colors'].get('surface', '#2a2139')
-                    border_color = current_theme_data['colors'].get('border', '#495495')
+                    surface_color = current_theme_data['colors'].get('surface', '#424242')
+                    border_color = current_theme_data['colors'].get('border', '#757575')
                     main_window.subitems_container.setStyleSheet(f"""
                         QWidget {{
                             border: 1px solid {border_color};
-                            background-color: transparent;
+                            background-color: {surface_color};
                         }}
                     """)
     

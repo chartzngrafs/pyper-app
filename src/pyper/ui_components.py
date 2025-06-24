@@ -637,7 +637,7 @@ class ContextualInfoPanel(QWidget):
         widget.setStyleSheet("background-color: #333; border-radius: 4px; margin: 3px;")
         return widget
     
-    def show_genre_info(self, genre_name, albums_data=None):
+    def show_genre_info(self, genre_name, albums_data=None, sonic_client=None):
         """Show genre information with albums"""
         self.clear_content()
         
@@ -664,12 +664,12 @@ class ContextualInfoPanel(QWidget):
         # Albums section
         if albums_data:
             for album in albums_data[:MAX_CONTEXTUAL_ALBUMS]:  # Show max albums
-                album_widget = self.create_album_widget(album, None)  # No sonic_client for genre view
+                album_widget = self.create_album_widget(album, sonic_client)  # Pass sonic_client for artwork
                 self.content_layout.addWidget(album_widget)
         
         self.content_layout.addStretch()
     
-    def show_decade_info(self, decade_name, albums_data=None):
+    def show_decade_info(self, decade_name, albums_data=None, sonic_client=None):
         """Show decade information with albums"""
         self.clear_content()
         
@@ -696,7 +696,7 @@ class ContextualInfoPanel(QWidget):
         # Albums section
         if albums_data:
             for album in albums_data[:MAX_CONTEXTUAL_ALBUMS]:  # Show max albums
-                album_widget = self.create_album_widget(album, None)  # No sonic_client for decade view
+                album_widget = self.create_album_widget(album, sonic_client)  # Pass sonic_client for artwork
                 self.content_layout.addWidget(album_widget)
         
         self.content_layout.addStretch()

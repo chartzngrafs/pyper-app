@@ -269,20 +269,16 @@ class PyperMainWindow(QMainWindow):
         self.mini_player_button = QPushButton("⧉")
         self.mini_player_button.setToolTip("Switch to Mini Player")
         self.mini_player_button.clicked.connect(self.toggle_mini_player)
-        self.mini_player_button.setMinimumWidth(35)
         self.mini_player_button.setStyleSheet("""
             QPushButton {
                 font-weight: bold;
-                font-size: 20px;
-                padding: 4px 8px;
+                font-size: 18px;
+                padding: 5px 10px;
                 border: 1px solid #666;
                 border-radius: 4px;
                 background-color: #444;
                 color: #fff;
-                text-align: center;
-                line-height: 1;
                 min-width: 60px;
-                max-width: 60px;
             }
             QPushButton:hover {
                 background-color: #555;
@@ -374,15 +370,16 @@ class PyperMainWindow(QMainWindow):
         controls_row.setSpacing(10)
         
         # Playback buttons
-        self.prev_button = QPushButton("Prev")
-        self.play_pause_button = QPushButton("Play")
-        self.stop_button = QPushButton("Stop")
-        self.next_button = QPushButton("Next")
+        self.prev_button = QPushButton("⏮")
+        self.play_pause_button = QPushButton("▶")
+        self.stop_button = QPushButton("⏹")
+        self.next_button = QPushButton("⏭")
         
         # Style the buttons consistently
         button_style = """
             QPushButton {
                 font-weight: bold;
+                font-size: 18px;
                 min-width: 60px;
                 min-height: 35px;
                 max-height: 35px;
@@ -505,7 +502,7 @@ class PyperMainWindow(QMainWindow):
         self.subitems_container.setStyleSheet("""
             QWidget {
                 border: 1px solid #666;
-                background-color: transparent;
+                background-color: #424242;
             }
         """)
         
@@ -669,6 +666,13 @@ class PyperMainWindow(QMainWindow):
         """Create the application menu bar with theme selection"""
         menubar = self.menuBar()
         
+        # File menu (should come first)
+        file_menu = menubar.addMenu('File')
+        quit_action = QAction('Quit', self)
+        quit_action.setShortcut('Ctrl+Q')
+        quit_action.triggered.connect(self.force_quit)
+        file_menu.addAction(quit_action)
+        
         # View menu
         view_menu = menubar.addMenu('View')
         
@@ -708,13 +712,6 @@ class PyperMainWindow(QMainWindow):
         mini_player_action = QAction('Switch to Mini Player', self)
         mini_player_action.triggered.connect(self.toggle_mini_player)
         view_menu.addAction(mini_player_action)
-        
-        # Add File menu for quit option
-        file_menu = menubar.addMenu('File')
-        quit_action = QAction('Quit', self)
-        quit_action.setShortcut('Ctrl+Q')
-        quit_action.triggered.connect(self.force_quit)
-        file_menu.addAction(quit_action)
         
     def setup_connections(self):
         """Setup signal connections"""
@@ -1250,7 +1247,7 @@ class PyperMainWindow(QMainWindow):
                 # Show genre info in contextual panel
                 if self.contextual_panel:
                     self.contextual_panel.show()
-                    self.contextual_panel.show_genre_info(data['name'], albums)
+                    self.contextual_panel.show_genre_info(data['name'], albums, self.sonic_client)
                     
                 self.status_label.setText(f"Loaded {len(albums)} albums for {data['name']}")
             except Exception as e:
@@ -1277,7 +1274,7 @@ class PyperMainWindow(QMainWindow):
                 # Show decade info in contextual panel
                 if self.contextual_panel:
                     self.contextual_panel.show()
-                    self.contextual_panel.show_decade_info(data['name'], albums)
+                    self.contextual_panel.show_decade_info(data['name'], albums, self.sonic_client)
                     
                 self.status_label.setText(f"Loaded {len(albums)} albums from {data['name']}")
             except Exception as e:
@@ -2183,7 +2180,7 @@ class PyperMainWindow(QMainWindow):
                 # Start playback
                 self.media_player.setSource(QUrl(stream_url))
                 self.media_player.play()
-                self.play_pause_button.setText("Pause")
+                self.play_pause_button.setText("⏸")
                 
                 # Load artwork if available
                 if 'coverArt' in song:
@@ -2214,11 +2211,11 @@ class PyperMainWindow(QMainWindow):
         """Toggle play/pause"""
         if self.media_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.media_player.pause()
-            self.play_pause_button.setText("Play")
+            self.play_pause_button.setText("▶")
         else:
             if self.current_playing_index >= 0:
                 self.media_player.play()
-                self.play_pause_button.setText("Pause")
+                self.play_pause_button.setText("⏸")
             elif self.current_queue:
                 self.play_track(0)
         
@@ -2235,7 +2232,7 @@ class PyperMainWindow(QMainWindow):
             self.stop_radio_metadata()
             
         self.media_player.stop()
-        self.play_pause_button.setText("Play")
+        self.play_pause_button.setText("▶")
         self.now_playing_label.setText("Stopped")
         
         # Update mini player
@@ -2391,7 +2388,7 @@ class PyperMainWindow(QMainWindow):
             # Start radio playback - radio streams directly, no queue needed
             self.media_player.setSource(QUrl(stream_url))
             self.media_player.play()
-            self.play_pause_button.setText("Pause")
+            self.play_pause_button.setText("⏸")
             
             # Set initial radio artwork
             logger.info("Setting initial radio artwork...")
@@ -2820,6 +2817,7 @@ class TrayHoverWidget(QWidget):
         
         self.prev_button = QPushButton("⏮")
         self.play_pause_button = QPushButton("▶")
+        self.stop_button = QPushButton("⏹")
         self.next_button = QPushButton("⏭")
         
         button_style = """
@@ -2843,7 +2841,7 @@ class TrayHoverWidget(QWidget):
             }
         """
         
-        for btn in [self.prev_button, self.play_pause_button, self.next_button]:
+        for btn in [self.prev_button, self.play_pause_button, self.stop_button, self.next_button]:
             btn.setStyleSheet(button_style)
             controls_layout.addWidget(btn)
         
