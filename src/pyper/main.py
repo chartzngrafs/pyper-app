@@ -43,7 +43,17 @@ try:
     from .background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from .ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget, MiniPlayerDialog
     from .desktop_integration import DesktopIntegrationManager
-    from .dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
+    
+    # Try to import dynamic themes (optional feature)
+    try:
+        from .dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
+        DYNAMIC_THEMES_AVAILABLE = True
+    except ImportError:
+        # Dynamic themes not available - continue without the feature
+        DynamicThemeEngine = None
+        ThemedPlaylistsTab = None
+        DYNAMIC_THEMES_AVAILABLE = False
+        
 except ImportError:
     # Fall back to absolute imports (when run directly)
     import sys
@@ -55,7 +65,16 @@ except ImportError:
     from background_tasks import LibraryRefreshThread, ImageDownloadThread, ICYMetadataParser
     from ui_components import NowPlayingDialog, ContextualInfoPanel, AlbumGridWidget
     from desktop_integration import DesktopIntegrationManager
-    from dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
+    
+    # Try to import dynamic themes (optional feature)
+    try:
+        from dynamic_themes import DynamicThemeEngine, ThemedPlaylistsTab
+        DYNAMIC_THEMES_AVAILABLE = True
+    except ImportError:
+        # Dynamic themes not available - continue without the feature
+        DynamicThemeEngine = None
+        ThemedPlaylistsTab = None
+        DYNAMIC_THEMES_AVAILABLE = False
 
 # Setup logging
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
@@ -2754,10 +2773,21 @@ class PyperMainWindow(QMainWindow):
     def initialize_dynamic_themes(self):
         """Initialize the dynamic theme engine and themed playlists tab"""
         try:
+            # Check if dynamic themes are available
+            if not DYNAMIC_THEMES_AVAILABLE or DynamicThemeEngine is None or ThemedPlaylistsTab is None:
+                logger.info("Dynamic themes feature not available - skipping initialization")
+                logger.info("To enable dynamic themes, install: pip install scikit-learn numpy")
+                return
+            
             logger.info("Initializing dynamic themes feature")
             
-            # Initialize theme engine
-            self.dynamic_theme_engine = DynamicThemeEngine(self.library_data, self.sonic_client)
+            # Initialize theme engine - this might fail if dependencies aren't properly loaded
+            try:
+                self.dynamic_theme_engine = DynamicThemeEngine(self.library_data, self.sonic_client)
+            except Exception as e:
+                logger.error(f"Failed to initialize theme engine: {e}")
+                logger.info("Dynamic themes feature disabled due to initialization error")
+                return
             
             # Create themed playlists tab
             self.themed_playlists_tab = ThemedPlaylistsTab(self, self.dynamic_theme_engine)
