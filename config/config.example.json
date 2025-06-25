@@ -13,6 +13,40 @@
         "window_width": 1400,
         "window_height": 900
     },
+    "dynamic_themes": {
+        "advanced_analysis": {
+            "enabled": false,
+            "audio_analysis": true,
+            "sample_duration": 45,
+            "analysis_timeout": 300,
+            "parallel_workers": 2
+        },
+        "clustering": {
+            "algorithm": "auto",
+            "user_choice": true,
+            "min_clusters": 5,
+            "max_clusters": 25
+        },
+        "cache": {
+            "max_size_mb": 100,
+            "clear_on_analysis": true,
+            "feature_cache_days": 30,
+            "audio_features_cache": true
+        },
+        "external_services": {
+            "musicbrainz_enabled": true,
+            "lastfm_fallback": true,
+            "rate_limit_delay": 1.2,
+            "request_timeout": 10
+        },
+        "audio_features": {
+            "bpm_analysis": true,
+            "energy_analysis": true,
+            "quantization_detection": true,
+            "mood_detection": true,
+            "spectral_analysis": true
+        }
+    },
     "_theme_options": {
         "qt_material_themes": [
             "dark_teal",

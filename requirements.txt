@@ -7,4 +7,8 @@ PyGObject>=3.42.0
 requests>=2.25.1
 # Dynamic Themed Playlists dependencies
 scikit-learn>=1.0.0
-numpy>=1.21.0 
+numpy>=1.21.0
+# Phase 2 Advanced Features
+librosa>=0.8.1
+musicbrainzngs>=0.7.1
+scipy>=1.7.0 

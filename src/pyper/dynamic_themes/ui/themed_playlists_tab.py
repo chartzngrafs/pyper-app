@@ -13,6 +13,8 @@ from PyQt6.QtGui import QFont
 from typing import List, Dict, Any
 
 from .theme_discovery_thread import ThemeDiscoveryThread
+from .advanced_settings_dialog import AdvancedSettingsDialog
+from ..config_manager import DynamicThemesConfig
 
 logger = logging.getLogger('ThemedPlaylistsTab')
 
@@ -31,6 +33,7 @@ class ThemedPlaylistsTab(QWidget):
         self.discovered_themes = []
         self.discovery_thread = None
         self.theme_cards = []
+        self.config = DynamicThemesConfig()
         
         self.setup_ui()
         self.setup_connections()
@@ -69,6 +72,12 @@ class ThemedPlaylistsTab(QWidget):
         self.discover_button.setMinimumHeight(40)
         self.discover_button.clicked.connect(self.start_theme_discovery)
         status_layout.addWidget(self.discover_button)
+        
+        # Advanced settings button
+        self.advanced_settings_button = QPushButton("⚙️ Advanced Settings")
+        self.advanced_settings_button.setMinimumHeight(40)
+        self.advanced_settings_button.clicked.connect(self.show_advanced_settings)
+        status_layout.addWidget(self.advanced_settings_button)
         
         # Status display
         self.status_label = QLabel("Library analysis status: Never analyzed")
@@ -338,4 +347,47 @@ class ThemedPlaylistsTab(QWidget):
     def save_theme(self, theme: Dict[str, Any]):
         """Request to save a theme as a playlist"""
         logger.info(f"Saving theme as playlist: {theme['name']}")
-        self.save_theme_requested.emit(theme) 
+        self.save_theme_requested.emit(theme)
+    
+    def show_advanced_settings(self):
+        """Show the advanced settings dialog"""
+        try:
+            dialog = AdvancedSettingsDialog(self, self.config)
+            
+            # Connect settings applied signal
+            dialog.settings_applied.connect(self.on_settings_applied)
+            
+            # Show dialog
+            result = dialog.exec()
+            
+            if result == AdvancedSettingsDialog.DialogCode.Accepted:
+                logger.info("Advanced settings dialog accepted")
+            else:
+                logger.info("Advanced settings dialog cancelled")
+                
+        except Exception as e:
+            logger.error(f"Failed to show advanced settings: {e}")
+    
+    def on_settings_applied(self):
+        """Handle when advanced settings are applied"""
+        logger.info("Advanced settings applied, updating status")
+        
+        # Update status based on advanced analysis setting
+        if self.config.is_advanced_analysis_enabled():
+            self.status_label.setText("Advanced analysis enabled - enhanced theme discovery available")
+        else:
+            self.status_label.setText("Basic analysis mode - enable advanced features in settings")
+        
+        # If we have themes and advanced analysis was just enabled, suggest re-analysis
+        if self.discovered_themes and self.config.is_advanced_analysis_enabled():
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self, 
+                "Advanced Analysis Enabled",
+                "Advanced analysis has been enabled. Would you like to re-analyze your library "
+                "with the new advanced features (audio analysis, external APIs)?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.start_theme_discovery() 

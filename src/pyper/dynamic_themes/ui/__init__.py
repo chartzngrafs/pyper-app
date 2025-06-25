@@ -5,8 +5,10 @@ User interface components for the themed playlists feature
 
 from .themed_playlists_tab import ThemedPlaylistsTab
 from .theme_discovery_thread import ThemeDiscoveryThread
+from .advanced_settings_dialog import AdvancedSettingsDialog
 
 __all__ = [
     'ThemedPlaylistsTab',
-    'ThemeDiscoveryThread'
+    'ThemeDiscoveryThread',
+    'AdvancedSettingsDialog'
 ] 

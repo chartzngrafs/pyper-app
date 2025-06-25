@@ -11,11 +11,13 @@ __author__ = "Pyper Development Team"
 
 # Import main components
 from .dynamic_theme_engine import DynamicThemeEngine
+from .config_manager import DynamicThemesConfig
 
 # Import UI components - using import from ui package
 from .ui import ThemedPlaylistsTab
 
 __all__ = [
     'DynamicThemeEngine',
+    'DynamicThemesConfig', 
     'ThemedPlaylistsTab'
 ] 
