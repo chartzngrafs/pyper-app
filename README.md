@@ -130,19 +130,13 @@ The feature is designed to reveal the hidden patterns in your music collection, 
 
 ### Alternative Installation (any Linux):
 
-1. **Create a virtual environment:**
+1. **Install requirements:**
    ```bash
-   python -m venv venv
-   source venv/bin/activate
-   ```
-
-2. **Install requirements:**
-   ```bash
-   pip install -r requirements.txt
+   pip install --break-system-packages -r requirements.txt
    # Note: requirements.txt includes scikit-learn and numpy for theme discovery
    ```
 
-3. **Configure and run as above**
+2. **Configure and run as above**
 
 ## ⚙️ Configuration
 
