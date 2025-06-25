@@ -26,7 +26,7 @@ class CustomSubsonicClient:
         """Generate a random salt for authentication"""
         return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
     
-    def _make_request(self, endpoint, params=None):
+    def _make_request(self, endpoint, params=None, stream=False):
         """Make an authenticated request to the Subsonic API"""
         if params is None:
             params = {}
@@ -46,10 +46,13 @@ class CustomSubsonicClient:
         base_params.update(params)
         url = f"{self.server_url}/rest/{endpoint}"
         
-        response = requests.get(url, params=base_params)
+        response = requests.get(url, params=base_params, stream=stream)
         response.raise_for_status()
         
-        if response.headers.get('content-type', '').startswith('application/json'):
+        if stream:
+            # Return raw response for streaming
+            return response
+        elif response.headers.get('content-type', '').startswith('application/json'):
             return response.json()
         else:
             return response.content

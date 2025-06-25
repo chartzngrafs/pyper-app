@@ -18,10 +18,11 @@ class DynamicThemesConfig:
     DEFAULT_CONFIG = {
         "advanced_analysis": {
             "enabled": False,  # Opt-in for Phase 2 features
-            "audio_analysis": True,
-            "sample_duration": 45,  # seconds
-            "analysis_timeout": 300,  # 5 minutes max
-            "parallel_workers": 2
+            "audio_analysis": False,  # Disabled by default for performance
+            "sample_duration": 30,  # Reduced from 45s for faster analysis
+            "analysis_timeout": 180,  # 3 minutes max (reduced from 5)
+            "parallel_workers": 1,   # Reduced from 2 to avoid rate limiting issues
+            "smart_sampling": True   # Enable intelligent sampling for large libraries
         },
         "clustering": {
             "algorithm": "auto",  # "kmeans", "hierarchical", "dbscan", "auto"
@@ -38,8 +39,8 @@ class DynamicThemesConfig:
         "external_services": {
             "musicbrainz_enabled": True,
             "lastfm_fallback": True,
-            "rate_limit_delay": 1.2,  # seconds between API calls
-            "request_timeout": 10
+            "rate_limit_delay": 0.5,  # Reduced from 1.2s - MusicBrainz allows 1 req/sec
+            "request_timeout": 8      # Reduced from 10s for faster failure detection
         },
         "audio_features": {
             "bpm_analysis": True,
@@ -47,6 +48,12 @@ class DynamicThemesConfig:
             "quantization_detection": True,
             "mood_detection": True,
             "spectral_analysis": True
+        },
+        "external_apis": {
+            "musicbrainz_enabled": True,
+            "lastfm_enabled": False,  # Requires API key
+            "lastfm_api_key": None,   # Set via config or environment variable
+            "rate_limit_delay": 1.0
         }
     }
     

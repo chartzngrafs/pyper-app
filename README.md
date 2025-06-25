@@ -461,20 +461,23 @@ Pyper follows a clean, modular architecture with separation of concerns:
 
 ## 🎯 Recent Updates
 
-### v2.7 - Dynamic Themed Playlists (Phase 1)
-- **🎯 AI-Powered Theme Discovery**: Complete implementation of library-specific theme discovery system:
-  - **Multi-Dimensional Clustering**: K-means analysis of genre, year, play count, and duration characteristics
-  - **Personalized Theme Generation**: Discovers 10-15 unique themes specific to each user's library composition
-  - **Intelligent Theme Naming**: Generates descriptive names like "2010s Indie Rock Wave" or "Hidden Gems Alternative"
-  - **Background Processing**: Non-blocking analysis with detailed progress tracking and status updates
-  - **Smart Caching System**: Instant access to previously analyzed themes with automatic cache management
-- **🎨 Your Library Themes Tab**: New dedicated interface positioned between "Recently Played" and "Radio":
-  - **Discovery Controls**: One-click theme analysis with "🔍 Discover My Themes" button
-  - **Responsive Theme Grid**: Visual theme cards displaying track counts, descriptions, and interaction controls
-  - **Direct Actions**: Play (▶), Queue (+), and Save (💾) themes with one-click operations
-  - **Progress Visualization**: Real-time analysis progress with detailed status messages
-  - **Database Integration**: Utilizes existing Navidrome database for enhanced analysis accuracy
-- **⚡ Performance Optimized**: Analysis completes in <30 seconds for 5000+ track libraries with minimal memory footprint
+### v2.7 - Dynamic Themed Playlists (Phase 2 Step 2)
+- **🎯 Advanced AI-Powered Theme Discovery**: Enhanced library analysis with external API integration:
+  - **Multi-Dimensional Clustering**: K-means analysis enhanced with audio features, genre tags, and community metadata
+  - **External API Integration**: MusicBrainz and Last.fm integration for community-driven genre and mood classification
+  - **Smart Sampling Strategy**: Intelligent 6.7% sampling for large libraries achieving 20x performance improvement
+  - **Advanced Audio Analysis**: Librosa integration for BPM, energy, and spectral feature extraction (configurable)
+  - **Enhanced Configuration**: Comprehensive settings in Advanced Settings dialog with API key management
+  - **Performance Optimization**: Analysis time reduced from 60+ minutes to 2-3 minutes for large libraries
+- **🎨 Your Library Themes Tab**: Mature interface with advanced discovery capabilities:
+  - **Clear Cache & Re-analyze**: Force fresh analysis bypassing all cached results
+  - **Enhanced Progress Tracking**: Detailed per-track analysis progress with API call monitoring
+  - **Intelligent Theme Naming**: Community-driven naming using MusicBrainz genre tags and Last.fm mood data
+  - **Theme Quality Filtering**: Automatic filtering of low-coherence themes for better results
+  - **Database Integration**: Full utilization of Navidrome database plus external metadata enrichment
+- **⚡ Performance & Intelligence Balance**: 2-3 minute analysis for 3000+ track libraries with rich metadata integration
+
+**Current Status**: Phase 2 Step 2 functional but needs refinement in theme naming and API data utilization. See `docs/AI_PLAYLIST_FEATURE.md` for detailed next steps.
 
 ### v2.6 - MPRIS2 Desktop Integration
 - **🖥️ Full MPRIS2 Protocol Support**: Complete Linux desktop environment integration:

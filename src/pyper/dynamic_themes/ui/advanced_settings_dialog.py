@@ -8,7 +8,8 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QGroupBox, QCheckBox, QComboBox, QSpinBox, QSlider, QTabWidget,
-    QWidget, QFormLayout, QDialogButtonBox, QTextEdit, QProgressBar
+    QWidget, QFormLayout, QDialogButtonBox, QTextEdit, QProgressBar,
+    QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QIcon
@@ -26,14 +27,42 @@ class AdvancedSettingsDialog(QDialog):
     
     def __init__(self, parent=None, config: Optional[DynamicThemesConfig] = None):
         super().__init__(parent)
-        self.config = config or DynamicThemesConfig()
-        self.original_config = self.config.config.copy()  # Backup for cancel
         
-        self.setup_ui()
-        self.load_current_settings()
-        self.setup_connections()
-        
-        logger.info("Advanced settings dialog initialized")
+        try:
+            logger.info("Initializing advanced settings dialog...")
+            
+            # Initialize config with safety checks
+            if config is None:
+                logger.info("No config provided, creating new DynamicThemesConfig")
+                self.config = DynamicThemesConfig()
+            else:
+                logger.info("Using provided config")
+                self.config = config
+            
+            # Backup config for cancel functionality
+            if hasattr(self.config, 'config') and isinstance(self.config.config, dict):
+                self.original_config = self.config.config.copy()
+                logger.info("Config backup created")
+            else:
+                logger.warning("Config object has unexpected structure, using empty backup")
+                self.original_config = {}
+            
+            logger.info("Setting up UI...")
+            self.setup_ui()
+            
+            logger.info("Loading current settings...")
+            self.load_current_settings()
+            
+            logger.info("Setting up connections...")
+            self.setup_connections()
+            
+            logger.info("Advanced settings dialog initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize advanced settings dialog: {e}")
+            import traceback
+            logger.error(f"Initialization traceback: {traceback.format_exc()}")
+            raise
     
     def setup_ui(self):
         """Create the UI layout"""
@@ -265,11 +294,53 @@ class AdvancedSettingsDialog(QDialog):
         )
         services_layout.addWidget(self.musicbrainz_checkbox)
         
-        self.lastfm_checkbox = QCheckBox("Enable Last.fm Fallback")
+        self.lastfm_checkbox = QCheckBox("Enable Last.fm Integration")
         self.lastfm_checkbox.setToolTip(
-            "Use Last.fm as fallback when MusicBrainz is unavailable"
+            "Use Last.fm API for community tags, popularity metrics, and enhanced intelligence"
         )
         services_layout.addWidget(self.lastfm_checkbox)
+        
+        # Last.fm Configuration
+        lastfm_config_layout = QFormLayout()
+        
+        self.lastfm_api_key_input = QLineEdit()
+        self.lastfm_api_key_input.setPlaceholderText("Enter your Last.fm API key")
+        self.lastfm_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.lastfm_api_key_input.setToolTip(
+            "Get a free API key from https://www.last.fm/api/account/create"
+        )
+        
+        self.lastfm_username_input = QLineEdit()
+        self.lastfm_username_input.setPlaceholderText("Your Last.fm username (optional)")
+        self.lastfm_username_input.setToolTip(
+            "Optional: Your Last.fm username for personalized recommendations"
+        )
+        
+        # Show/hide API key button
+        self.show_api_key_button = QPushButton("👁")
+        self.show_api_key_button.setMaximumWidth(30)
+        self.show_api_key_button.setToolTip("Show/hide API key")
+        self.show_api_key_button.clicked.connect(self.toggle_api_key_visibility)
+        
+        # Create API key layout with show/hide button
+        api_key_layout = QHBoxLayout()
+        api_key_layout.addWidget(self.lastfm_api_key_input)
+        api_key_layout.addWidget(self.show_api_key_button)
+        
+        # Add rows to form layout
+        lastfm_config_layout.addRow("Last.fm API Key:", api_key_layout)
+        lastfm_config_layout.addRow("Last.fm Username:", self.lastfm_username_input)
+        
+        services_layout.addLayout(lastfm_config_layout)
+        
+        # Help text
+        help_label = QLabel(
+            '<small><a href="https://www.last.fm/api/account/create">Get a free Last.fm API key</a> '
+            'for enhanced theme intelligence with community data.</small>'
+        )
+        help_label.setOpenExternalLinks(True)
+        help_label.setWordWrap(True)
+        services_layout.addWidget(help_label)
         
         # Rate limiting
         rate_limit_layout = QFormLayout()
@@ -295,6 +366,15 @@ class AdvancedSettingsDialog(QDialog):
         layout.addStretch()
         
         return tab
+    
+    def toggle_api_key_visibility(self):
+        """Toggle API key visibility"""
+        if self.lastfm_api_key_input.echoMode() == QLineEdit.EchoMode.Password:
+            self.lastfm_api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.show_api_key_button.setText("🙈")
+        else:
+            self.lastfm_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.show_api_key_button.setText("👁")
     
     def setup_connections(self):
         """Setup signal connections"""
@@ -360,7 +440,19 @@ class AdvancedSettingsDialog(QDialog):
         
         # External services
         self.musicbrainz_checkbox.setChecked(self.config.is_musicbrainz_enabled())
-        self.lastfm_checkbox.setChecked(self.config.is_lastfm_fallback_enabled())
+        self.lastfm_checkbox.setChecked(
+            self.config.config.get('external_apis', {}).get('lastfm_enabled', False)
+        )
+        
+        # Last.fm configuration
+        import os
+        api_key = (self.config.config.get('external_apis', {}).get('lastfm_api_key') or 
+                  os.getenv('LASTFM_API_KEY', ''))
+        self.lastfm_api_key_input.setText(api_key)
+        
+        username = self.config.config.get('external_apis', {}).get('lastfm_username', '')
+        self.lastfm_username_input.setText(username)
+        
         self.rate_limit_spin.setValue(int(self.config.get_rate_limit_delay()))
         self.request_timeout_spin.setValue(
             self.config.config.get('external_services', {}).get('request_timeout', 10)
@@ -422,9 +514,15 @@ class AdvancedSettingsDialog(QDialog):
             if 'external_services' not in self.config.config:
                 self.config.config['external_services'] = {}
             self.config.config['external_services']['musicbrainz_enabled'] = self.musicbrainz_checkbox.isChecked()
-            self.config.config['external_services']['lastfm_fallback'] = self.lastfm_checkbox.isChecked()
             self.config.config['external_services']['rate_limit_delay'] = float(self.rate_limit_spin.value())
             self.config.config['external_services']['request_timeout'] = self.request_timeout_spin.value()
+            
+            # Last.fm API configuration
+            if 'external_apis' not in self.config.config:
+                self.config.config['external_apis'] = {}
+            self.config.config['external_apis']['lastfm_enabled'] = self.lastfm_checkbox.isChecked()
+            self.config.config['external_apis']['lastfm_api_key'] = self.lastfm_api_key_input.text().strip()
+            self.config.config['external_apis']['lastfm_username'] = self.lastfm_username_input.text().strip()
             
             # Save configuration
             self.config.save_config()

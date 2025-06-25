@@ -79,6 +79,13 @@ class ThemedPlaylistsTab(QWidget):
         self.advanced_settings_button.clicked.connect(self.show_advanced_settings)
         status_layout.addWidget(self.advanced_settings_button)
         
+        # Clear cache & re-analyze button
+        self.clear_cache_button = QPushButton("🗑️ Clear Cache & Re-analyze")
+        self.clear_cache_button.setMinimumHeight(40)
+        self.clear_cache_button.setToolTip("Clear all cached analysis data and perform fresh analysis with current settings")
+        self.clear_cache_button.clicked.connect(self.clear_cache_and_reanalyze)
+        status_layout.addWidget(self.clear_cache_button)
+        
         # Status display
         self.status_label = QLabel("Library analysis status: Never analyzed")
         self.status_label.setStyleSheet("color: #666; font-style: italic;")
@@ -158,10 +165,14 @@ class ThemedPlaylistsTab(QWidget):
         
         # Update UI state
         self.discover_button.setEnabled(False)
+        self.clear_cache_button.setEnabled(False)  # Disable clear cache button during analysis
         self.progress_bar.setVisible(True)
         self.progress_status.setVisible(True)
         self.progress_bar.setValue(0)
         self.progress_status.setText("Initializing...")
+        
+        # Reset status label styling
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
         
         # Clear existing themes
         self.clear_themes_display()
@@ -185,6 +196,7 @@ class ThemedPlaylistsTab(QWidget):
         
         # Update UI state
         self.discover_button.setEnabled(True)
+        self.clear_cache_button.setEnabled(True)  # Re-enable clear cache button
         self.progress_bar.setVisible(False)
         self.progress_status.setVisible(False)
         
@@ -205,6 +217,7 @@ class ThemedPlaylistsTab(QWidget):
         
         # Update UI state
         self.discover_button.setEnabled(True)
+        self.clear_cache_button.setEnabled(True)  # Re-enable clear cache button
         self.progress_bar.setVisible(False)
         self.progress_status.setVisible(False)
         self.status_label.setText("Last analysis: Failed")
@@ -352,12 +365,18 @@ class ThemedPlaylistsTab(QWidget):
     def show_advanced_settings(self):
         """Show the advanced settings dialog"""
         try:
+            logger.info("Creating advanced settings dialog...")
+            
+            # Create dialog with error handling
             dialog = AdvancedSettingsDialog(self, self.config)
+            logger.info("Advanced settings dialog created successfully")
             
             # Connect settings applied signal
             dialog.settings_applied.connect(self.on_settings_applied)
+            logger.info("Signal connections established")
             
             # Show dialog
+            logger.info("Showing advanced settings dialog...")
             result = dialog.exec()
             
             if result == AdvancedSettingsDialog.DialogCode.Accepted:
@@ -367,6 +386,16 @@ class ThemedPlaylistsTab(QWidget):
                 
         except Exception as e:
             logger.error(f"Failed to show advanced settings: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Show error to user
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                "Settings Error",
+                f"Failed to open advanced settings:\n{str(e)}\n\nCheck the logs for more details."
+            )
     
     def on_settings_applied(self):
         """Handle when advanced settings are applied"""
@@ -390,4 +419,74 @@ class ThemedPlaylistsTab(QWidget):
             )
             
             if reply == QMessageBox.StandardButton.Yes:
-                self.start_theme_discovery() 
+                self.start_theme_discovery()
+    
+    def clear_cache_and_reanalyze(self):
+        """Clear all cached analysis data and perform fresh analysis with current settings"""
+        try:
+            # Ask for confirmation
+            reply = QMessageBox.question(
+                self, 
+                "Clear Cache & Re-analyze",
+                "This will clear all cached analysis data and perform a fresh analysis of your library. "
+                "This may take several minutes depending on your library size and settings.\n\n"
+                "Are you sure you want to continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            
+            logger.info("Clearing cache and re-analyzing library")
+            
+            # Clear all caches in the theme engine
+            if hasattr(self.theme_engine, 'clear_all_caches'):
+                self.theme_engine.clear_all_caches()
+                logger.info("All caches cleared successfully")
+            else:
+                logger.warning("Theme engine does not support cache clearing")
+            
+            # Update status to show cache was cleared and analysis is starting
+            self.status_label.setText("Cache cleared - starting fresh analysis...")
+            self.status_label.setStyleSheet("color: #ff6600; font-weight: bold;")
+            
+            # Start fresh theme discovery
+            self.start_fresh_theme_discovery()
+            
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            QMessageBox.warning(
+                self, 
+                "Cache Clear Failed", 
+                f"Failed to clear cache: {str(e)}\n\nYou can try restarting the application."
+            )
+    
+    def start_fresh_theme_discovery(self):
+        """Start theme discovery with forced fresh analysis (ignoring cached results)"""
+        if self.discovery_thread and self.discovery_thread.isRunning():
+            logger.warning("Theme discovery already in progress")
+            return
+        
+        logger.info("Starting fresh theme discovery (ignoring cache)")
+        
+        # Update UI state
+        self.discover_button.setEnabled(False)
+        self.clear_cache_button.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_status.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.progress_status.setText("Starting fresh analysis...")
+        
+        # Reset status label styling
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        
+        # Clear existing themes
+        self.clear_themes_display()
+        
+        # Start discovery thread with force_fresh=True
+        self.discovery_thread = ThemeDiscoveryThread(self.theme_engine, force_fresh=True)
+        self.discovery_thread.analysis_progress.connect(self.update_progress)
+        self.discovery_thread.discovery_complete.connect(self.discovery_completed)
+        self.discovery_thread.discovery_error.connect(self.discovery_failed)
+        self.discovery_thread.start() 

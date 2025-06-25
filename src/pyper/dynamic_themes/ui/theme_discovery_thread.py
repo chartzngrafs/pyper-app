@@ -18,27 +18,30 @@ class ThemeDiscoveryThread(QThread):
     discovery_complete = pyqtSignal(list)        # all themes discovered
     discovery_error = pyqtSignal(str)           # error message
     
-    def __init__(self, theme_engine):
+    def __init__(self, theme_engine, force_fresh: bool = False):
         super().__init__()
         self.theme_engine = theme_engine
         self.should_stop = False
+        self.force_fresh = force_fresh
         
     def run(self):
         """Execute theme discovery pipeline"""
         try:
             logger.info("Starting theme discovery in background thread")
             
-            # Check for cached themes first
-            cached_themes = self.theme_engine.get_cached_themes()
-            if cached_themes:
-                logger.info(f"Using cached themes: {len(cached_themes)} themes")
-                self.analysis_progress.emit("Loading cached themes...", 50)
-                self.discovery_complete.emit(cached_themes)
-                return
+            # If not forcing fresh analysis, check for cached themes first
+            if not self.force_fresh:
+                cached_themes = self.theme_engine.get_cached_themes()
+                if cached_themes:
+                    logger.info(f"Using cached themes: {len(cached_themes)} themes")
+                    self.analysis_progress.emit("Loading cached themes...", 50)
+                    self.discovery_complete.emit(cached_themes)
+                    return
             
-            # Run theme discovery with progress updates
+            # Run theme discovery with progress updates (force fresh if requested)
             discovered_themes = self.theme_engine.discover_library_themes(
-                progress_callback=self.emit_progress
+                progress_callback=self.emit_progress,
+                force_fresh=self.force_fresh
             )
             
             if self.should_stop:
